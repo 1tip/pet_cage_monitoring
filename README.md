@@ -7,6 +7,7 @@
 #define TFT_DC   16  
 #define TFT_RST  17  
   
+  
 26 DHT11(온습도센서)  
 32 PWM LED#1  
 21 PWM LED#2  
@@ -19,6 +20,7 @@
   
   
 # platformio.ini  
+  
 [env:esp32dev]  
 platform = espressif32  
 board = esp32dev  
@@ -38,3 +40,4 @@ build_flags =
         -include include/User_Setup.h  
 monitor_speed = 115200  
 upload_speed = 921600  
+
