@@ -47,7 +47,7 @@ const int daylightOffset_sec = 0;
 #define GRAPH_W 260           // 그래프박스 너비
 #define GRAPH_H 90
 
-#define DISPLAY_HOURS 1   // 1~24시간   (그래프 X축 폭 [GRAPH_W 260] 전체 채움 소요 시간)
+#define DISPLAY_HOURS 24   // 1~24시간   (그래프 X축 폭 [GRAPH_W 260] 전체 채움 소요 시간)
 #define NUM_LABELS 7      // X축 레이블 개수(칸갯수: n-1)
 
 
@@ -59,6 +59,8 @@ int labelOffset = 0; // X축 레이블 floating offset (1px 단위)
 // 1px 이동 시간 (DISPLAY_HOURS 기준)
 const unsigned long LABEL_SCROLL_INTERVAL_MS = (DISPLAY_HOURS * 3600UL * 1000UL) / GRAPH_W;
 
+
+#define GRID_COLOR  0x4208   // 매우 어두운 회색 (RGB565)  (TFT_DARKGREY보다 약 50% 정도 어두움)
 
 
 float tempBuf[GRAPH_W];
@@ -111,39 +113,13 @@ void drawTitle() {
   // 타이틀 텍스트
   tft.setTextColor(TFT_WHITE, TFT_NAVY);
   tft.setTextSize(2);
-  tft.setCursor(10, TITLE_Y + 6);  // 세로 중앙 보정
-  tft.print("Lizard Cage Monitoring");
+  tft.setCursor(0, TITLE_Y + 6);  // 세로 중앙 보정
+  tft.print("  Lizard Cage Monitoring");
 
   // 하단 구분선 (선택 사항, 입체감)
   tft.drawFastHLine(0, TITLE_Y + TITLE_H - 1, tft.width(), TFT_DARKGREY);
 }
 
-/*
-void drawTimeTempHumi(float t, float h, bool timeAvailable) {
-  tft.fillRect(0, INFO_Y, 240, 20, BG_COLOR);
-  tft.setTextSize(2);
-  tft.setTextColor(TFT_WHITE, BG_COLOR);
-  tft.setCursor(10, INFO_Y);
-
-  char buffer[32];
-  bool sensorErr = isnan(t) || isnan(h);
-
-  if (!timeAvailable || sensorErr) {
-    snprintf(buffer, sizeof(buffer), "--/-- --:--:-- T:-- H:--");
-  } else {
-    struct tm timeinfo;
-    if(!getLocalTime(&timeinfo)){
-      snprintf(buffer, sizeof(buffer), "--/-- --:--:-- T:-- H:--");
-    } else {
-      snprintf(buffer, sizeof(buffer), "%02d/%02d %02d:%02d:%02d T:%02.0f H:%02.0f",
-               timeinfo.tm_mon+1, timeinfo.tm_mday,
-               timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
-               t, h);
-    }
-  }
-  tft.print(buffer);
-}
-*/
 
 void drawTimeTempHumi(float t, float h, bool timeAvailable) {
   tft.fillRect(0, INFO_Y, 240, 20, BG_COLOR);
@@ -165,7 +141,8 @@ void drawTimeTempHumi(float t, float h, bool timeAvailable) {
   }
 
   // ---- 시각 ----
-  tft.setTextColor(TFT_WHITE, BG_COLOR);
+  //tft.setTextColor(TFT_WHITE, BG_COLOR);
+  tft.setTextColor(TFT_BLUE, BG_COLOR);
   tft.printf(" %02d:%02d:%02d  ",
              timeinfo.tm_hour,
              timeinfo.tm_min,
@@ -187,8 +164,6 @@ void drawTimeTempHumi(float t, float h, bool timeAvailable) {
   tft.setTextColor(TFT_GREEN, BG_COLOR);
   tft.printf("%02.0f%%", h);
 }
-
-
 
 
 
@@ -268,7 +243,7 @@ void drawGraph() {
 
 
 // =========================================
-// X-axis Labels (#define NUM_LABELS 에 따라 갯수가 정해짐(n-1), floating)
+// X-axis Labels (#define NUM_LABELS : 격자선 개수(n-1), floating)
 // Y축 기준선 추가
 // =========================================
 
@@ -276,11 +251,13 @@ void drawGraphLabels() {
 
   // ---------- Y축 레이블 및 기준선(시작) ----------
   tft.setTextSize(1);
-  tft.setTextColor(TFT_MAGENTA, BG_COLOR);
+  //tft.setTextColor(TFT_DARKGREY, BG_COLOR);
+  tft.setTextColor(TFT_DARKCYAN, BG_COLOR);
 
   for (int i = 20; i <= 80; i += 20) {
     int y = map(i, 0, 80, GRAPH_Y + GRAPH_H, GRAPH_Y);
-    tft.drawLine(GRAPH_X, y, GRAPH_X + GRAPH_W - 1, y, TFT_DARKGREY);
+    //tft.drawLine(GRAPH_X, y, GRAPH_X + GRAPH_W - 1, y, TFT_DARKGREY);
+    tft.drawLine(GRAPH_X, y, GRAPH_X + GRAPH_W - 1, y, GRID_COLOR);       // 매우 어두운 회색 (RGB565)
     tft.setCursor(GRAPH_X - 18, y - 4);
     tft.printf("%d", i);
   }
@@ -335,7 +312,8 @@ void drawGraphLabels() {
     if (x < GRAPH_X || x > GRAPH_X + GRAPH_W) continue;
 
     // 세로 기준선
-    tft.drawFastVLine(x, GRAPH_Y, GRAPH_H, TFT_DARKGREY);
+    // tft.drawFastVLine(x, GRAPH_Y, GRAPH_H, TFT_DARKGREY);
+    tft.drawFastVLine(x, GRAPH_Y, GRAPH_H, GRID_COLOR);           // 매우 어두운 회색 (RGB565)
 
     // 레이블
     char buf[6];
@@ -343,7 +321,7 @@ void drawGraphLabels() {
              labelMin / 60, labelMin % 60);
 
     tft.setTextSize(1);
-    tft.setTextColor(TFT_BLUE, BG_COLOR);
+    tft.setTextColor(TFT_DARKGREEN, BG_COLOR);             // TFT_BLUE
     tft.setCursor(x - 12, GRAPH_Y + GRAPH_H + 6);
     tft.print(buf);
   }
@@ -429,7 +407,6 @@ void setup() {
 
   drawTitle();
   initGraph();
-  drawGraphLabels();  // X, Y축 레이블, 격자 그리기
 
   drawLEDUI(1, LED_UI_Y1, brightnessStep[0], true);
   drawLEDUI(2, LED_UI_Y2, brightnessStep[1], false);
@@ -442,7 +419,21 @@ void setup() {
 
   connectExternalAP();
 
+  delay(5000);        // 시각동기완료 대기
+
+
+  // 부팅 직후 1회 온습도 읽기 및 그래프 그리기  (시각동기 이후 실행 권장)
+  float lastTemp = dht.readTemperature();
+  float lastHumi = dht.readHumidity();
+  if (!isnan(lastTemp) && !isnan(lastHumi)) {
+    pushGraphData(lastTemp, lastHumi);
+    drawGraph();
+  }
+  drawGraphLabels();  // X, Y축 레이블, 격자 그리기
+  lastSample = millis();
 }
+
+
 
 // =========================================
 void loop() {
@@ -502,6 +493,7 @@ void loop() {
     if (labelOffset >= (GRAPH_W / (NUM_LABELS - 1))) {
       labelOffset = 0;
     }
+
 
     // ---- 그래프 데이터 이동 ----
     if (!isnan(lastTemp) && !isnan(lastHumi)) {
