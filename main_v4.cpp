@@ -60,6 +60,10 @@ const int daylightOffset_sec = 0;
 #define NUM_LABELS 7      // X축 레이블 개수(칸갯수: n-1)
 
 
+
+#define TFT_ORANGE 0xFD20   // RGB565
+
+
 // ======= Global Variables =======
 unsigned long lastTimeAxisTick = 0;   // 그래프 + X축 레이블 공용
 
@@ -112,13 +116,23 @@ int stepToPWM(int step) {
 // UI Functions
 // =========================================
 void drawTitle() {
-  tft.setTextColor(TFT_WHITE, BG_COLOR);
+  const int TITLE_H = 28;   // 타이틀 영역 높이
+
+  // 타이틀 배경 (파란색 음영)
+  tft.fillRect(0, TITLE_Y, tft.width(), TITLE_H, TFT_NAVY);
+
+  // 타이틀 텍스트
+  tft.setTextColor(TFT_WHITE, TFT_NAVY);
   tft.setTextSize(2);
-  tft.setCursor(10, TITLE_Y);
-  tft.print(" Lizard Cage Monitoring");
+  tft.setCursor(10, TITLE_Y + 6);  // 세로 중앙 보정
+  tft.print("Lizard Cage Monitoring");
+
+  // 하단 구분선 (선택 사항, 입체감)
+  tft.drawFastHLine(0, TITLE_Y + TITLE_H - 1, tft.width(), TFT_DARKGREY);
 }
 
-void drawTempHumi(float t, float h, bool timeAvailable) {
+/*
+void drawTimeTempHumi(float t, float h, bool timeAvailable) {
   tft.fillRect(0, INFO_Y, 240, 20, BG_COLOR);
   tft.setTextSize(2);
   tft.setTextColor(TFT_WHITE, BG_COLOR);
@@ -140,9 +154,65 @@ void drawTempHumi(float t, float h, bool timeAvailable) {
                t, h);
     }
   }
-
   tft.print(buffer);
 }
+*/
+
+void drawTimeTempHumi(float t, float h, bool timeAvailable) {
+  tft.fillRect(0, INFO_Y, 240, 20, BG_COLOR);
+  tft.setTextSize(2);
+
+  // 좌측 쏠림 완화
+  tft.setCursor(20, INFO_Y);
+
+  char buffer[32];
+  bool sensorErr = isnan(t) || isnan(h);
+
+  // ---------- 시간 ----------
+  tft.setTextColor(TFT_WHITE, BG_COLOR);
+
+  if (!timeAvailable || sensorErr) {
+    tft.print("  --:--:--   ");   // 공백 3개
+    tft.setTextColor(TFT_DARKGREY, BG_COLOR);
+    tft.print("T:--   ");
+    tft.print("H:--");
+    return;
+  }
+
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    tft.print("  --:--:--   ");   // 공백 3개
+    tft.setTextColor(TFT_DARKGREY, BG_COLOR);
+    tft.print("T:--   ");
+    tft.print("H:--");
+    return;
+  }
+
+  snprintf(buffer, sizeof(buffer), "  %02d:%02d:%02d   ",
+           timeinfo.tm_hour,
+           timeinfo.tm_min,
+           timeinfo.tm_sec);
+  tft.print(buffer);
+
+  // ---------- 온도 ----------
+  tft.setTextColor(TFT_DARKGREY, BG_COLOR);
+  tft.print("T:");
+  tft.setTextColor(TFT_YELLOW, BG_COLOR);
+  snprintf(buffer, sizeof(buffer), "%02.0f   ", t);  // 공백 3개
+  tft.print(buffer);
+
+  // ---------- 습도 ----------
+  tft.setTextColor(TFT_DARKGREY, BG_COLOR);
+  tft.print("H:");
+  tft.setTextColor(TFT_CYAN, BG_COLOR);
+  snprintf(buffer, sizeof(buffer), "%02.0f", h);
+  tft.print(buffer);
+}
+
+
+
+
+
 
 void drawLEDUI(int led, int y, int level, bool selected) {
   tft.fillRect(0, y, 240, 28, BG_COLOR);
@@ -196,21 +266,22 @@ void drawGraph() {
   tft.fillRect(GRAPH_X, GRAPH_Y, GRAPH_W, GRAPH_H, BG_COLOR);       // 그래프박스 내부영역 지우기
 
 
-  // ---------- 온도 그래프 ----------
-  for (int i = 1; i < GRAPH_W; i++) {
-    if (!isnan(tempBuf[i - 1]) && !isnan(tempBuf[i])) {
-      int y1 = map(tempBuf[i - 1], 0, 80, GRAPH_Y + GRAPH_H, GRAPH_Y);
-      int y2 = map(tempBuf[i], 0, 80, GRAPH_Y + GRAPH_H, GRAPH_Y);
-      tft.drawLine(GRAPH_X + i - 1, y1, GRAPH_X + i, y2, TFT_RED);
-    }
-  }
-
   // ---------- 습도 그래프 ----------
   for (int i = 1; i < GRAPH_W; i++) {
     if (!isnan(humiBuf[i - 1]) && !isnan(humiBuf[i])) {
       int hy1 = map(humiBuf[i - 1], 0, 80, GRAPH_Y + GRAPH_H, GRAPH_Y);
       int hy2 = map(humiBuf[i], 0, 80, GRAPH_Y + GRAPH_H, GRAPH_Y);
       tft.drawLine(GRAPH_X + i - 1, hy1, GRAPH_X + i, hy2, TFT_CYAN);
+    }
+  }
+
+  // ---------- 온도 그래프 ----------
+  for (int i = 1; i < GRAPH_W; i++) {
+    if (!isnan(tempBuf[i - 1]) && !isnan(tempBuf[i])) {
+      int y1 = map(tempBuf[i - 1], 0, 80, GRAPH_Y + GRAPH_H, GRAPH_Y);
+      int y2 = map(tempBuf[i], 0, 80, GRAPH_Y + GRAPH_H, GRAPH_Y);
+      //tft.drawLine(GRAPH_X + i - 1, y1, GRAPH_X + i, y2, TFT_ORANGE);
+      tft.drawLine(GRAPH_X + i - 1, y1, GRAPH_X + i, y2, TFT_YELLOW);
     }
   }
 
@@ -299,10 +370,6 @@ void drawGraphLabels() {
   }
   tft.drawRect(GRAPH_X - 1, GRAPH_Y - 1, GRAPH_W + 2, GRAPH_H + 2, TFT_WHITE);   // 그래프영역 외곽선 그리기(겹침발생시 대비)
 }
-
-
-
-
 
 
 
@@ -444,7 +511,7 @@ void loop() {
     lastTemp = dht.readTemperature();
     lastHumi = dht.readHumidity();
 
-    drawTempHumi(lastTemp, lastHumi, externalAPConnected);
+    drawTimeTempHumi(lastTemp, lastHumi, externalAPConnected);
   }
 
   // ================== Time Axis Tick (Graph + Labels) ==================
