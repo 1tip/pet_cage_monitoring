@@ -218,7 +218,7 @@ void drawGraph() {
 
 
 // =========================================
-// X-axis Labels (6등분, 가장 오래된 1개는 미표시, floating)
+// X-axis Labels (#define NUM_LABELS 에 따라 갯수가 정해짐(n-1), floating)
 // Y축 기준선 추가
 // =========================================
 
