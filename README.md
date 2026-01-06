@@ -21,6 +21,7 @@
   
 # platformio.ini  
   
+```ini
 [env:esp32dev]
 platform = espressif32
 board = esp32dev
@@ -29,6 +30,7 @@ board_build.f_cpu = 240000000L
 board_build.f_flash = 80000000L
 board_build.flash_mode = qio
 board_build.partitions = default.csv
+
 lib_deps =
     ;lorol/LittleFS_esp32@^1.0.6
     bodmer/TFT_eSPI @ ^2.5.43
@@ -37,10 +39,13 @@ lib_deps =
     sensirion/Sensirion I2C SHT4x@^1.1.2
     adafruit/Adafruit AHTX0@^2.0.5
     adafruit/Adafruit BMP280 Library@^2.6.8
+
 build_flags =
     -D USER_SETUP_LOADED=1
     -D TFT_RGB_ORDER=TFT_BGR
     -I include/
     -include include/User_Setup.h
+
 monitor_speed = 115200
 upload_speed = 921600
+```
