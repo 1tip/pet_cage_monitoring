@@ -21,23 +21,28 @@
   
 # platformio.ini  
   
-[env:esp32dev]  
-platform = espressif32  
-board = esp32dev  
-framework = arduino  
-board_build.f_cpu = 240000000L  
-board_build.f_flash = 80000000L  
-board_build.flash_mode = qio  
-board_build.partitions = default.csv  
-lib_deps =   
-        bodmer/TFT_eSPI @ ^2.5.43  
-        adafruit/DHT sensor library@^1.4.6  
-        adafruit/Adafruit Unified Sensor@^1.1.15  
-build_flags =   
-        -D USER_SETUP_LOADED=1  
-        -D TFT_RGB_ORDER=TFT_BGR  
-        -I include/  
-        -include include/User_Setup.h  
-monitor_speed = 115200  
-upload_speed = 921600  
+[env:esp32dev]
+platform = espressif32
+board = esp32dev
+framework = arduino
+board_build.f_cpu = 240000000L
+board_build.f_flash = 80000000L
+board_build.flash_mode = qio
+board_build.partitions = default.csv
+lib_deps =
+    ;lorol/LittleFS_esp32@^1.0.6
+    bodmer/TFT_eSPI @ ^2.5.43
+    adafruit/Adafruit Unified Sensor@^1.1.15
+    arduino-libraries/NTPClient@^3.2.1
+    sensirion/Sensirion I2C SHT4x@^1.1.2
+    adafruit/Adafruit AHTX0@^2.0.5
+    adafruit/Adafruit BMP280 Library@^2.6.8
+build_flags =
+    -D USER_SETUP_LOADED=1
+    -D TFT_RGB_ORDER=TFT_BGR
+    -I include/
+    -include include/User_Setup.h
+monitor_speed = 115200
+upload_speed = 921600
+
 
