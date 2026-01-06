@@ -44,5 +44,3 @@ build_flags =
     -include include/User_Setup.h
 monitor_speed = 115200
 upload_speed = 921600
-
-
