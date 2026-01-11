@@ -49,3 +49,11 @@ build_flags =
 monitor_speed = 115200
 upload_speed = 921600
 ```
+
+
+<img width="1009" height="715" alt="image" src="https://github.com/user-attachments/assets/87005772-8779-44cd-8027-194986f76060" />
+<img width="1002" height="1003" alt="image" src="https://github.com/user-attachments/assets/ef55b780-c381-4327-91b2-6bab423cd9c1" />
+
+
+
+
