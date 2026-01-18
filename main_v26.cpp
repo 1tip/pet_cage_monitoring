@@ -1,4 +1,4 @@
-// 그래프 X축 그리드 버그 수정
+// 트리플클릭 기능 추가 등 (화면회전)
 /**************************************************************
  * Lizard Cage Monitoring (Stable + Scroll Graph + External AP + Long-term Graph)
  * ESP32 + TFT_eSPI + DHT22 + Rotary Encoder
