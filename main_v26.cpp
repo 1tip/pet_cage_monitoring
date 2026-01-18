@@ -1045,6 +1045,9 @@ void drawGraphGrid(const TimeAxisState &axis) {
 
 
 
+
+
+
 void drawGraphLabels(const TimeAxisState &axis) {
   // 1. 시간 스케일 표시 (1H, 6H 등)
   tft.setTextSize(1);
@@ -1059,29 +1062,32 @@ void drawGraphLabels(const TimeAxisState &axis) {
   for (int v = Y_MIN + 20; v <= Y_MAX; v += 20) {
     int y = map(v, Y_MIN, Y_MAX, layout_graph_y + layout_graph_h, layout_graph_y);
     
-    if (screenRotation == 1) {
-      tft.setCursor(layout_graph_x - 18, y - 4);                         // LANDSCAPE (가로) 좌표 보정
+    if (screenRotation == 1) {                                                      // 1: 가로, 0: 세로
+      tft.setCursor(layout_graph_x - 18, y - 4);                         
     } else { 
-      tft.setCursor(layout_graph_x - 16, y - 2);                         // PORTRAIT (세로) 좌표 보정
+      tft.setCursor(layout_graph_x - 16, y - 2);                         
     }
     tft.printf("%d", v);
   }
 
   // Y축 최솟값(0) 그리기
   int y0 = layout_graph_y + layout_graph_h;
-  if (screenRotation == 1) {                                              // LANDSCAPE
+  if (screenRotation == 1) {                                              
      tft.setCursor(layout_graph_x - 12, y0 - 6);
-  } else {                                                                // PORTRAIT
-     tft.setCursor(layout_graph_x - 8, y0 - 4);
+  } else {                                                                
+     tft.setCursor(layout_graph_x - 10, y0 - 8);
   }
   tft.printf("%d", Y_MIN);
 
-  // 3. X축 라벨 (시간) 그리기
-  // 그래프 아래쪽 영역 지우기 (잔상 제거)
 
-  tft.setTextSize(1);                                                       // FreeFont는 기본 크기 사용
+  // ==========================================================================================
+  // [수정] 3. X축 라벨 (시간) 그리기
+  // ==========================================================================================
+  
+  tft.setTextSize(1);
 
-  tft.fillRect(0, layout_graph_y + layout_graph_h + 4, layout_graph_w + 44, 14, BG_COLOR);
+  // [수정 1] 지우는 영역 확장 (Y축 기준 -2px 위로 올려서 잔상 제거)
+  tft.fillRect(0, layout_graph_y + layout_graph_h + 4, layout_graph_w + 44, 18, BG_COLOR);
 
   for (int i = 0; i < layout_num_labels; i++) {
     float offsetMin = (layout_num_labels - 1 - i) * axis.labelStepMin;
@@ -1090,29 +1096,27 @@ void drawGraphLabels(const TimeAxisState &axis) {
     
     int x = axis.anchorX - (int)((offsetMin / axis.minPerPx) + 0.5f);
     
-    // 그래프 범위를 벗어나면 그리지 않음
     if (x < layout_graph_x || x > layout_graph_x + layout_graph_w) continue;
     
     char buf[6];
     snprintf(buf, sizeof(buf), "%02d:%02d", labelMin / 60, labelMin % 60);
     tft.setTextColor(TFT_DARKGREEN, BG_COLOR);
 
-    // #if defined 대신 변수로 분기
-    if (screenRotation == 1) {                                                      // LANDSCAPE
+    if (screenRotation == 1) {                                                      
+        // LANDSCAPE (가로)
         tft.setCursor(x - 14 + 4, layout_graph_y + layout_graph_h + 6);
-    } else {                                                                        // PORTRAIT
-        tft.setCursor(x - 20 + 4, layout_graph_y + layout_graph_h + 5);
+    } else {                                                                        
+        // [수정 2] PORTRAIT (세로) 텍스트 위치 1px 아래로 이동
+        // 기존 Y: + 5  ->  + 6 (1px 내림)
+        tft.setCursor(x - 20 + 4, layout_graph_y + layout_graph_h + 6);
     }
     
     tft.print(buf); 
-    // tft.print("     "); // (선택) 공백 출력은 상황에 따라 제거 가능
   }
 
   // 4. 그래프 외곽선 그리기
   tft.drawRect(layout_graph_x - 1, layout_graph_y - 1, layout_graph_w + 2, layout_graph_h + 2, TFT_WHITE);
 }
-
-
 
 
 
@@ -1386,8 +1390,9 @@ void checkTemperature() {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
+
 void drawSystemInfo() {
-  // 1. 배경 지우기 (타이틀바 아래 영역 전체)
+  // 1. 배경 지우기
   tft.fillRect(0, TITLE_Y + 28, tft.width(), tft.height() - (TITLE_Y + 28), GRID_COLOR);
   
   tft.setTextSize(1);
@@ -1395,42 +1400,90 @@ void drawSystemInfo() {
   tft.setCursor(10, INFO_Y);
   tft.print("System Info:");
   
-  int y_offset = INFO_Y + 30;
+  // [수정] 화면 모드에 따른 줄 간격 및 시작 위치 조정
+  int stepY = (screenRotation == 1) ? 15 : 20;           // 가로면 15px, 세로면 20px
+  int y_offset = INFO_Y + ((screenRotation == 1) ? 20 : 30); // 가로면 좀 더 위에서 시작
 
   // --- 네트워크 정보 ---
-  tft.setCursor(10, y_offset); tft.printf("WiFi: %s", WiFi.SSID().c_str()); y_offset += 20;
-  tft.setCursor(10, y_offset); tft.printf("Ext.IP: %s", WiFi.localIP().toString().c_str()); y_offset += 20;
-  tft.setCursor(10, y_offset); tft.printf("Int.IP: %s", WiFi.softAPIP().toString().c_str()); y_offset += 20;
+  tft.setCursor(10, y_offset); tft.printf("WiFi: %s", WiFi.SSID().c_str()); y_offset += stepY;
+  tft.setCursor(10, y_offset); tft.printf("Ext.IP: %s", WiFi.localIP().toString().c_str()); y_offset += stepY;
+  tft.setCursor(10, y_offset); tft.printf("Int.IP: %s", WiFi.softAPIP().toString().c_str()); y_offset += stepY;
 
-  // [추가] 접속 ID (AP이름) 및 비밀번호 표시
-  // 눈에 잘 띄게 노란색으로 표시
+  // 접속 ID (AP이름) 및 비밀번호
   tft.setTextColor(TFT_YELLOW, GRID_COLOR); 
-  tft.setCursor(10, y_offset); tft.printf("AP/ID: %s", loginUser.c_str()); y_offset += 20;
-  tft.setCursor(10, y_offset); tft.printf("PW: %s", loginPass.c_str()); y_offset += 20;
-  tft.setTextColor(TFT_WHITE, GRID_COLOR); // 다시 흰색으로 복구
+  tft.setCursor(10, y_offset); tft.printf("AP/ID: %s", loginUser.c_str()); y_offset += stepY;
+  tft.setCursor(10, y_offset); tft.printf("PW: %s", loginPass.c_str()); y_offset += stepY;
+  tft.setTextColor(TFT_WHITE, GRID_COLOR); // 색상 복구
 
-  // --- 시스템 상태 정보 ---
-  unsigned long s = millis()/1000;
-  tft.setCursor(10, y_offset); tft.printf("Uptime: %luD %02luH %02luM", s/86400, (s%86400)/3600, (s%3600)/60); y_offset += 20;
+  // --- Uptime 계산 ---
+  unsigned long runMillis = millis();
+  unsigned long allSeconds = runMillis / 1000;
+  int runDays = allSeconds / 86400;
+  int runHours = (allSeconds % 86400) / 3600;
+  int runMins = (allSeconds % 3600) / 60;
+
+  tft.setCursor(10, y_offset); 
+  tft.printf("Uptime: %dd %02dh %02dm", runDays, runHours, runMins); 
+  y_offset += stepY;
   
-  tft.setCursor(10, y_offset); tft.printf("NTP: %s", timeSynced ? "OK" : "NO"); y_offset += 20;
+  // --- 기타 시스템 정보 ---
+  tft.setCursor(10, y_offset); tft.printf("NTP: %s", timeSynced ? "OK" : "NO"); y_offset += stepY;
 
   String modeStr;
   if (humidifierMode == AUTO) modeStr = "AUTO";
   else if (humidifierMode == ON) modeStr = "ON";
   else modeStr = "OFF";
   tft.setCursor(10, y_offset); tft.printf("Humi Mode: %s", modeStr.c_str());
+  y_offset += stepY;
 
-  y_offset += 20;
-  tft.setCursor(10, y_offset); tft.printf("Humi Set: %d%% ~ %d%%", humiMin, humiMax);
-  y_offset += 20;
-  tft.setCursor(10, y_offset); tft.printf("Temp Set: %dC ~ %dC", tempMin, tempMax);
+  // [핵심 수정] 가로 모드일 때는 온도/습도 설정을 한 줄로 표시하여 공간 절약
+  if (screenRotation == 1) {
+      tft.setCursor(10, y_offset); 
+      // 예: Set: H(40~60%) T(25~30C)
+      tft.printf("Set: H(%d~%d%%) T(%d~%dC)", humiMin, humiMax, tempMin, tempMax);
+  } else {
+      // 세로 모드는 기존처럼 두 줄로 표시
+      tft.setCursor(10, y_offset); tft.printf("Humi Set: %d%% ~ %d%%", humiMin, humiMax);
+      y_offset += stepY;
+      tft.setCursor(10, y_offset); tft.printf("Temp Set: %dC ~ %dC", tempMin, tempMax);
+  }
 }
 
 
 
 
 
+// 화면 회전 토글 함수 (트리플 클릭 시 호출)
+void toggleScreenRotation() {
+    // 1. 회전 값 변경 (0 <-> 1)
+    screenRotation = (screenRotation == 0) ? 1 : 0;
+
+    // 2. 변경된 값 저장 (재부팅 후에도 유지)
+    preferences.begin("Storage", false);
+    preferences.putInt("rotation", screenRotation);
+    preferences.end();
+
+    // 3. 화면 초기화 및 레이아웃 재계산
+    tft.fillScreen(BG_COLOR);       // 화면 지우기
+    updateLayout();                 // 좌표 새로 계산
+    tft.setRotation(screenRotation); // 회전 적용
+
+    // 4. 그래프 스프라이트 재생성 (가로/세로 크기가 달라지므로 필수)
+    graphSprite.deleteSprite();
+    graphSprite.setColorDepth(16);
+    graphSprite.createSprite(layout_graph_w, layout_graph_h);
+
+    // 5. 화면 요소 다시 그리기
+    drawTitle();
+    updateGraphTimeScale();         // 그래프 스케일(픽셀 당 시간) 재계산
+    drawGraphFrame();
+    drawGraph();
+    drawConditionFace();
+    drawStatusIcons();
+
+    // 정보창이 떠 있었다면 끄기 (화면이 바뀌었으므로)
+    sysInfoDisplayUntil = 0;
+}
 
 
 
@@ -1442,6 +1495,8 @@ void removeLogFile(){
     initDisplayBuffer();
     drawGraph();
 }
+
+
 
 
 
@@ -1472,22 +1527,32 @@ void handleEncoderButton() {
         }
     }
     
-    // Process clicks after a timeout
+    // Process clicks after a timeout (입력 대기 시간 후 처리)
     if (btnClickCount > 0 && now - btnReleaseTime > DOUBLE_CLICK_MS) {
         if (btnClickCount == 1) {
-            // Single click action
+            // Single click: 그래프 모드 변경 (1H, 6H...)
             changeGraphMode();
         } else if (btnClickCount == 2) {
-            // Double click action
+            // Double click: 시스템 정보 표시
             sysInfoDisplayUntil = millis() + 3000;
             drawSystemInfo();
+        } else if (btnClickCount == 3) {
+            // Triple click: 화면 회전 토글
+            toggleScreenRotation();
         }
+        
+        // 클릭 카운트 초기화
         btnClickCount = 0;
-
     }
 
     btnPrevState = btnCurrState;
 }
+
+
+
+
+
+
 
 
 
@@ -1542,77 +1607,6 @@ void handleRoot(bool error = false) {
 
 
 
-
-
-/*
-const char DASHBOARD_PART1[] PROGMEM = R"rawliteral(
-<!DOCTYPE html><html><head><title>Dashboard</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{font-family:-apple-system,system-ui,BlinkMacSystemFont,"Segoe UI","Roboto","Helvetica Neue",Arial,sans-serif;background-color:#f4f4f4;margin:0;padding:10px;color:#333}
-.container{max-width:600px;margin:1em auto;background-color:#fff;padding:1em;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
-h2{text-align:center;color:#007bff;margin-bottom:0.5em;margin-top:0;}
-.menu-button{display:block;width:100%;padding:12px;margin-bottom:10px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:4px;text-align:center;font-weight:bold;box-sizing:border-box;font-size:1em}
-.menu-button:hover{background-color:#0056b3}
-.download-button{background-color:#28a745;margin-top:10px}
-.download-button:hover{background-color:#218838}
-.chart-container{margin-top:15px;border:1px solid #ddd;padding:10px 15px;border-radius:4px;background:#fff;position:relative}
-
-canvas{width:100%;height:150px;display:block}
-#chartMsg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#999;font-weight:bold;display:none;font-size:0.9em;}
-
-.header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-.header-row h3 { margin: 0; color: #555; font-size: 1.1em; }
-.cur-val { font-size: 0.9em; font-weight: bold; color: #333; }
-
-.ctrl-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-
-.time-selector { display: flex; gap: 5px; }
-.ts-btn {
-    background: transparent; 
-    border: none; 
-    padding: 2px 6px; 
-    cursor: pointer; 
-    color: #ccc;       
-    font-size: 0.8em;   
-    font-weight: bold;
-    border-radius: 4px;
-    transition: 0.2s;
-}
-.ts-btn:hover { color: #888; }
-.ts-btn.active { 
-    color: #007bff;     
-    background: #eef;   
-}
-
-
-.legend { font-size: 0.8em; }
-.leg-item { display: inline-block; margin-left: 10px; color: #666; }
-.dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
-
-</style></head><body><div class="container"><h2>Device Dashboard</h2>
-
-<div class="chart-container">
-    <div class="header-row">
-        <h3>Live History</h3>
-        <div id="curStat" class="cur-val">Loading...</div>
-    </div>
-
-    <div class="ctrl-row">
-        <div class="time-selector">
-            <button class="ts-btn active" onclick="setRange(1)">1H</button>
-            <button class="ts-btn" onclick="setRange(6)">6H</button>
-            <button class="ts-btn" onclick="setRange(12)">12H</button>
-            <button class="ts-btn" onclick="setRange(24)">24H</button>
-        </div>
-        <div class="legend">
-            <span class="leg-item"><span class="dot" style="background:#d9534f;"></span>Temp</span>
-            <span class="leg-item"><span class="dot" style="background:#0275d8;"></span>Humi</span>
-        </div>
-    </div>
-
-    <canvas id="myChart"></canvas><div id="chartMsg">Loading...</div>
-</div><br>)rawliteral";
-*/
 
 
 
@@ -1693,7 +1687,6 @@ canvas{width:100%;height:150px;display:block}
 
 
 
-/*
 const char DASHBOARD_PART2[] PROGMEM = R"rawliteral(
 <a href="/config" class="menu-button">Network & Admin</a>
 <a href="/ntpconfig" class="menu-button">Time Sync (NTP)</a>
@@ -1724,143 +1717,20 @@ function setRange(r) {
     drawGraph();
 }
 
-function drawGraph(){
-    fetch('/graphdata?range=' + currentRange)
-    .then(r=>r.json()).then(d=>{
-        const w=cvs.clientWidth; const h=150; 
-        const padL=30; const padR=30; const bMargin=20;
-        
-        const gw = w - padL - padR;
-        const gh = h - bMargin; 
-        
-        ctx.clearRect(0,0,w,h);
-        if(!d||d.length<2){msgDiv.style.display='block';msgDiv.innerText="Waiting for data...";return;}
-        msgDiv.style.display='none';
-        
-        const lastData = d[d.length-1];
-        if(lastData) {
-            curDiv.innerHTML = `<span style="color:#d9534f">${lastData.tp.toFixed(1)}°C</span> / <span style="color:#0275d8">${lastData.hm.toFixed(1)}%</span>`;
-        }
-        
-        const endTime = lastData.t;
-        const rangeSec = currentRange * 3600; 
-        const startTime = endTime - rangeSec;
-
-        let minT=100, maxT=-50, minH=100, maxH=0;
-        
-        // [수정] 이상한 값(-999 등) 필터링 로직 추가
-        d.forEach(v=>{
-            // 온도가 정상 범위(-50 ~ 100)일 때만 최소/최대 계산
-            if(v.tp > -50 && v.tp < 100) {
-                if(v.tp<minT) minT=v.tp; 
-                if(v.tp>maxT) maxT=v.tp;
-            }
-            // 습도가 정상 범위(0 ~ 100)일 때만 계산
-            if(v.hm >= 0 && v.hm <= 100) {
-                if(v.hm<minH) minH=v.hm; 
-                if(v.hm>maxH) maxH=v.hm;
-            }
-        });
-        
-        // 데이터가 없거나 전부 에러일 경우를 대비한 기본값 보정
-        if(minT > maxT) { minT=20; maxT=30; } 
-        if(minH > maxH) { minH=40; maxH=60; }
-
-        minT=Math.floor(minT-1); maxT=Math.ceil(maxT+1);
-        minH=Math.floor(minH-2); maxH=Math.ceil(maxH+2);
-        
-        let rngT = maxT - minT; if(rngT<=0) rngT=5;
-        let rngH = maxH - minH; if(rngH<=0) rngH=10;
-
-        // Y축 (온도/습도)
-        ctx.strokeStyle='#eee'; ctx.lineWidth=1; ctx.beginPath();
-        ctx.font='10px Arial';
-        ctx.textBaseline = 'middle'; 
-        
-        for(let i=0; i<=4; i++){ 
-            let y = gh - (i * gh / 4);
-            ctx.moveTo(padL, y); ctx.lineTo(padL + gw, y); 
-            
-            ctx.textAlign = 'right';
-            ctx.fillStyle = '#d9534f';
-            ctx.fillText(Math.round(minT + (rngT * i / 4)), padL - 5, y);
-
-            ctx.textAlign = 'left';
-            ctx.fillStyle = '#0275d8';
-            ctx.fillText(Math.round(minH + (rngH * i / 4)), w - padR + 5, y);
-        }
-        ctx.stroke();
-
-        // X축 (시간 격자)
-        ctx.textAlign='center';
-        ctx.textBaseline = 'alphabetic';
-        ctx.beginPath();
-        
-        let gridStepSec = 600; 
-        if (currentRange === 6) gridStepSec = 3600; 
-        if (currentRange === 12) gridStepSec = 7200; 
-        if (currentRange === 24) gridStepSec = 14400;
-
-        let gridT = Math.ceil(startTime / gridStepSec) * gridStepSec;
-
-        while(gridT <= endTime) {
-            let x = padL + ((gridT - startTime) / rangeSec) * gw;
-            
-            if (x >= padL && x <= padL + gw) {
-                ctx.moveTo(x, 0); ctx.lineTo(x, gh);
-                
-                let dt = new Date(gridT * 1000);
-                let hStr = dt.getHours().toString().padStart(2,'0');
-                let mStr = dt.getMinutes().toString().padStart(2,'0');
-                let ts = (gridStepSec >= 3600) ? hStr + ':00' : hStr + ':' + mStr;
-                
-                ctx.fillStyle = '#999';
-                ctx.fillText(ts, x, h - 5);
-            }
-            gridT += gridStepSec;
-        }
-        ctx.stroke();
-)rawliteral";
-*/
-
-
-
-
-
-const char DASHBOARD_PART2[] PROGMEM = R"rawliteral(
-<a href="/config" class="menu-button">Network & Admin</a>
-<a href="/ntpconfig" class="menu-button">Time Sync (NTP)</a>
-<a href="/remote" class="menu-button">Remote Control</a>
-<a href="/sensorconfig" class="menu-button">Device Settings</a>
-<a href="/downloadlog" class="menu-button download-button">Download Log File</a>
-</div><script>
-const cvs=document.getElementById('myChart');const ctx=cvs.getContext('2d');const msgDiv=document.getElementById('chartMsg');
-const curDiv=document.getElementById('curStat');
-let currentRange = 1;
-
-function resizeCanvas(){
-    const p=cvs.parentElement;
-    cvs.width=p.clientWidth*2;
-    cvs.height=300; 
-    cvs.style.width=p.clientWidth+'px';
-    cvs.style.height='150px';
-    ctx.scale(2,2);
-}
-window.addEventListener('resize',()=>{resizeCanvas();drawGraph();});resizeCanvas();
-
-function setRange(r) {
-    currentRange = r;
-    document.querySelectorAll('.ts-btn').forEach(b => {
-        b.classList.remove('active');
-        if(b.innerText === r+'H') b.classList.add('active');
-    });
-    drawGraph();
+// [추가] 실시간 상태 업데이트 함수 (가벼운 요청)
+function updateLiveStatus() {
+    fetch('/sensordata')
+    .then(r => r.json())
+    .then(d => {
+        // d.temp, d.humi는 문자열(예: "25.5")로 옴
+        curDiv.innerHTML = `<span style="color:#d9534f">${d.temp}°C</span> / <span style="color:#0275d8">${d.humi}%</span>`;
+    })
+    .catch(e => console.log("Live update failed"));
 }
 
 function drawGraph(){
     fetch('/graphdata?range=' + currentRange)
     .then(r=>r.json()).then(d=>{
-        // [수정] 캔버스 내부 여백 조정: 왼쪽 20, 오른쪽 30 (그래프를 왼쪽으로 당김)
         const w=cvs.clientWidth; const h=150; 
         const padL=20; const padR=30; const bMargin=20;
         
@@ -1871,10 +1741,14 @@ function drawGraph(){
         if(!d||d.length<2){msgDiv.style.display='block';msgDiv.innerText="Waiting for data...";return;}
         msgDiv.style.display='none';
         
+        // 그래프 로딩 시점에도 한 번 업데이트 (백업용)
         const lastData = d[d.length-1];
-        if(lastData) {
-            curDiv.innerHTML = `<span style="color:#d9534f">${lastData.tp.toFixed(1)}°C</span> / <span style="color:#0275d8">${lastData.hm.toFixed(1)}%</span>`;
-        }
+        /* [수정] 여기서 curDiv를 업데이트하지 않아도 updateLiveStatus가 처리하지만,
+           그래프 데이터 로딩 직후 즉시 동기화를 위해 남겨두거나, 
+           updateLiveStatus()가 주기적으로 도니까 이 부분은 생략해도 됩니다.
+           충돌 방지를 위해 여기서는 주석 처리하거나 놔둬도 무방합니다.
+           (아래 코드는 놔두되, 어차피 3초 뒤에 덮어씌워집니다.)
+        */
         
         const endTime = lastData.t;
         const rangeSec = currentRange * 3600; 
@@ -1882,7 +1756,6 @@ function drawGraph(){
 
         let minT=100, maxT=-50, minH=100, maxH=0;
         d.forEach(v=>{
-            // 유효 데이터 범위 체크 (-50 ~ 100도, 0 ~ 100%)
             if(v.tp > -50 && v.tp < 100) {
                 if(v.tp<minT) minT=v.tp; if(v.tp>maxT) maxT=v.tp;
             }
@@ -1900,7 +1773,6 @@ function drawGraph(){
         let rngT = maxT - minT; if(rngT<=0) rngT=5;
         let rngH = maxH - minH; if(rngH<=0) rngH=10;
 
-        // Y축 (온도/습도)
         ctx.strokeStyle='#eee'; ctx.lineWidth=1; ctx.beginPath();
         ctx.font='10px Arial';
         ctx.textBaseline = 'middle'; 
@@ -1911,7 +1783,7 @@ function drawGraph(){
             
             ctx.textAlign = 'right';
             ctx.fillStyle = '#d9534f';
-            ctx.fillText(Math.round(minT + (rngT * i / 4)), padL - 4, y); // 왼쪽 라벨 위치 조정
+            ctx.fillText(Math.round(minT + (rngT * i / 4)), padL - 4, y);
 
             ctx.textAlign = 'left';
             ctx.fillStyle = '#0275d8';
@@ -1919,7 +1791,6 @@ function drawGraph(){
         }
         ctx.stroke();
 
-        // X축 (시간 격자)
         ctx.textAlign='center';
         ctx.textBaseline = 'alphabetic';
         ctx.beginPath();
@@ -1956,7 +1827,6 @@ function drawGraph(){
 
 
 
-
 const char DASHBOARD_PART3[] PROGMEM = R"rawliteral(
 function drawLine(key, color, minVal, rangeVal){
     ctx.beginPath();
@@ -1967,10 +1837,8 @@ function drawLine(key, color, minVal, rangeVal){
     let firstPoint = true;
 
     d.forEach((v)=>{
-        // [핵심] 시간 기반 좌표 계산 (LCD 스타일)
         let x = padL + ((v.t - startTime) / rangeSec) * gw;
         
-        // 그래프 범위(왼쪽 여백)보다 오른쪽에 있는 데이터만 그리기
         if(x >= padL - 5) { 
             let val = v[key];
             let y = gh - ((val - minVal) / rangeVal * gh);
@@ -1986,8 +1854,20 @@ drawLine('tp', '#d9534f', minT, rngT);
 drawLine('hm', '#0275d8', minH, rngH);
 
 }).catch(e=>{console.log(e);msgDiv.style.display='block';msgDiv.innerText="Error";});}
-setTimeout(drawGraph,2000);setInterval(drawGraph,60000);
+
+// [핵심 변경]
+// 1. 그래프는 1분(60000ms)마다 갱신 (무거움)
+setTimeout(drawGraph, 2000); 
+setInterval(drawGraph, 60000); 
+
+// 2. 현재값(텍스트)은 4초(4000ms)마다 갱신 (가벼움)
+// 부하를 줄이기 위해 4~5초 권장
+updateLiveStatus(); 
+setInterval(updateLiveStatus, 4000); 
+
 </script></body></html>)rawliteral";
+
+
 
 
 
@@ -2022,6 +1902,8 @@ void handleLogin() {
 
 
 
+
+
 void handleRemote() {
     server.sendHeader("Connection", "close"); 
 
@@ -2029,34 +1911,38 @@ void handleRemote() {
     server.send(200, "text/html; charset=UTF-8", "");
 
     server.sendContent(F("<!DOCTYPE html><html><head><title>Remote Control</title><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>"
-        "body{font-family:sans-serif;background-color:#f4f4f4;margin:0;padding:10px;color:#333}"
-        ".container{max-width:600px;margin:0 auto;background-color:#fff;padding:15px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,.1)}"
-        "h2{text-align:center;color:#007bff;margin:0 0 15px 0}"
-        "fieldset{border:1px solid #ddd;border-radius:5px;padding:15px;margin-bottom:15px}"
-        "legend{font-size:1.1em;font-weight:bold;color:#007bff;padding:0 5px}"
-        ".radio-group div{margin-bottom:5px}"
+        "body{font-family:sans-serif;background-color:#f4f4f4;margin:0;padding:5px;color:#333}"
+        ".container{max-width:600px;margin:0 auto;background-color:#fff;padding:10px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,.1)}"
+        "h2{text-align:center;color:#007bff;margin:0 0 10px 0; font-size:1.3em;}"
         
-        ".control-columns{display:grid; grid-template-columns:1fr 1fr; gap:20px;}"
-        "@media (max-width: 480px){ .control-columns{grid-template-columns:1fr;} }" 
+        "fieldset{border:1px solid #ddd;border-radius:5px;padding:8px;margin-bottom:10px}"
+        "legend{font-size:1em;font-weight:bold;color:#007bff;padding:0 5px}"
         
-        ".control-group h4{margin:0 0 10px 0; color:#555; border-bottom:2px solid #eee; padding-bottom:5px; text-align:center;}"
+        ".control-columns{display:grid; grid-template-columns:1fr 1fr; gap:8px;}"
         
-        // [수정] 통합된 입력 박스 스타일
-        ".combined-box{display:flex; justify-content:space-around; align-items:center; background:#f8f9fa; border:1px solid #dee2e6; border-radius:6px; padding:15px 5px;}"
+        ".control-group h4{margin:0 0 5px 0; color:#555; border-bottom:1px solid #eee; padding-bottom:3px; text-align:center; font-size:0.95em;}"
         
-        // [수정] 내부 입력 래퍼 (라벨 + 인풋)
-        ".input-wrapper{display:flex; flex-direction:column; align-items:center; width:45%;}"
-        ".input-wrapper label{font-size:0.8em; color:#6c757d; font-weight:bold; margin-bottom:5px; text-transform:uppercase;}"
-        ".input-wrapper input{width:100%; padding:8px; text-align:center; border:1px solid #ced4da; border-radius:4px; font-size:1.1em; font-weight:bold; color:#007bff; box-sizing:border-box;}"
+        ".combined-box{display:flex; justify-content:space-between; align-items:center; background:#f8f9fa; border:1px solid #dee2e6; border-radius:6px; padding:8px 2px;}"
         
-        // 버튼 스타일
-        "input[type='submit'], .btn-back{width:100%;padding:12px;border:none;border-radius:4px;font-size:1em;font-weight:bold;margin-top:10px;cursor:pointer;display:block;text-align:center;text-decoration:none;box-sizing:border-box}"
+        ".input-wrapper{display:flex; flex-direction:column; align-items:center; width:48%;}"
+        ".input-wrapper label{font-size:0.75em; color:#6c757d; font-weight:bold; margin-bottom:2px; text-transform:uppercase;}"
+        ".input-wrapper input{width:100%; padding:5px; text-align:center; border:1px solid #ced4da; border-radius:4px; font-size:1em; font-weight:bold; color:#007bff; box-sizing:border-box;}"
+        
+        "input[type='submit'], .btn-back{width:100%;padding:10px;border:none;border-radius:4px;font-size:1em;font-weight:bold;margin-top:8px;cursor:pointer;display:block;text-align:center;text-decoration:none;box-sizing:border-box}"
         "input[type='submit']{background-color:#28a745;color:#fff}"
         "input[type='submit']:hover{background-color:#218838}"
         ".btn-back{background-color:#6c757d;color:#fff}"
         ".btn-back:hover{background-color:#5a6268}"
         
-        "</style></head><body><div class=\"container\"><h2>Remote Control</h2><form method='POST' action='/setterminal'><fieldset><legend>Auto Control Settings</legend>"));
+        // 수동 제어 그리드
+        ".manual-grid {display:flex; justify-content:space-between; text-align:center; font-size:0.85em;}"
+        ".manual-item {flex:1; padding:0 2px;}"
+        
+        // 라디오 버튼 정렬
+        ".radio-group { display: inline-block; text-align: left; margin-top: 5px; }" 
+        ".radio-group div { margin-bottom: 4px; }"
+        
+        "</style></head><body><div class=\"container\"><h2>Remote Control</h2><form method='POST' action='/setterminal'><fieldset><legend>Auto Settings</legend>"));
     
     char buffer[1024]; 
     char tempStr[10]; char humiStr[10];
@@ -2064,66 +1950,63 @@ void handleRemote() {
     if (isnan(lastTemp)) strcpy(tempStr, "N/A"); else snprintf(tempStr, sizeof(tempStr), "%.1f", lastTemp);
     if (isnan(lastHumi)) strcpy(humiStr, "N/A"); else snprintf(humiStr, sizeof(humiStr), "%.1f", lastHumi);
 
-    // 현재 상태 표시
-    snprintf(buffer, sizeof(buffer), "<div style='text-align:center; padding:10px; background:#e9ecef; border-radius:5px; margin-bottom:15px;'>"
-                                     "<span style='font-size:0.9em; color:#666;'>Current Status</span><br>"
-                                     "<strong style='font-size:1.4em; color:#d9534f;'>%s°C</strong> &nbsp;|&nbsp; "
-                                     "<strong style='font-size:1.4em; color:#0275d8;'>%s%%</strong></div>", tempStr, humiStr);
+    // [핵심 수정] span과 strong 태그에 id='temp_val', id='humi_val' 추가
+    // 자바스크립트가 이 ID를 찾아서 숫자를 바꿔줍니다.
+    snprintf(buffer, sizeof(buffer), "<div style='text-align:center; padding:5px; background:#e9ecef; border-radius:5px; margin-bottom:10px;'>"
+                                     "<span style='font-size:0.8em; color:#666;'>Current Status</span> "
+                                     "<strong id='temp_val' style='font-size:1.1em; color:#d9534f;'>%s°C</strong> | "
+                                     "<strong id='humi_val' style='font-size:1.1em; color:#0275d8;'>%s%%</strong></div>", tempStr, humiStr);
     server.sendContent(buffer);
 
-    // 2단 레이아웃 (좌: 온도 / 우: 습도)
     server.sendContent(F("<div class='control-columns'>"));
 
-    // [수정] 1. Temperature Group (통합 박스 적용)
-    server.sendContent(F("<div class='control-group'><h4>Temperature (°C)</h4><div class='combined-box'>"));
-    // Max Temp
+    // 1. Temperature
+    server.sendContent(F("<div class='control-group'><h4>Temp (°C)</h4><div class='combined-box'>"));
     snprintf(buffer, sizeof(buffer), "<div class='input-wrapper'><label>Max</label><input type='number' name='temp_max' value='%d'></div>", tempMax);
     server.sendContent(buffer);
-    // Min Temp
     snprintf(buffer, sizeof(buffer), "<div class='input-wrapper'><label>Min</label><input type='number' name='temp_min' value='%d'></div>", tempMin);
     server.sendContent(buffer);
-    server.sendContent(F("</div></div>")); // End Temp Group
+    server.sendContent(F("</div></div>")); 
 
-    // [수정] 2. Humidity Group (통합 박스 적용)
-    server.sendContent(F("<div class='control-group'><h4>Humidity (%)</h4><div class='combined-box'>"));
-    // Max Humi
+    // 2. Humidity
+    server.sendContent(F("<div class='control-group'><h4>Humi (%)</h4><div class='combined-box'>"));
     snprintf(buffer, sizeof(buffer), "<div class='input-wrapper'><label>Max</label><input type='number' name='humi_max' value='%d'></div>", humiMax);
     server.sendContent(buffer);
-    // Min Humi
     snprintf(buffer, sizeof(buffer), "<div class='input-wrapper'><label>Min</label><input type='number' name='humi_min' value='%d'></div>", humiMin);
     server.sendContent(buffer);
-    server.sendContent(F("</div></div>")); // End Humi Group
+    server.sendContent(F("</div></div>")); 
 
-    server.sendContent(F("</div>")); // End Columns
+    server.sendContent(F("</div>")); 
     
-    server.sendContent(F("</fieldset><fieldset><legend>Manual Override</legend><div style=\"display: flex; justify-content: space-around;\">"));
+    // 수동 제어 섹션
+    server.sendContent(F("</fieldset><fieldset><legend>Manual</legend><div class='manual-grid'>"));
 
     // 가습기
-    server.sendContent(F("<div><strong>Humidifier</strong><div class=\"radio-group\"><div><input type=\"radio\" id=\"h_a\" name=\"humi_mode\" value=\"auto\" "));
+    server.sendContent(F("<div class='manual-item'><strong>Humi</strong><br><div class=\"radio-group\"><div><input type=\"radio\" id=\"h_a\" name=\"humi_mode\" value=\"auto\" "));
     if (humidifierMode == AUTO) server.sendContent(F("checked"));
-    server.sendContent(F("><label for=\"h_a\" style=\"font-weight:normal\">AUTO</label></div><div><input type=\"radio\" id=\"h_o\" name=\"humi_mode\" value=\"on\" "));
+    server.sendContent(F("><label for=\"h_a\">AUTO</label></div><div><input type=\"radio\" id=\"h_o\" name=\"humi_mode\" value=\"on\" "));
     if (humidifierMode == ON) server.sendContent(F("checked"));
-    server.sendContent(F("><label for=\"h_o\" style=\"font-weight:normal\">ON</label></div><div><input type=\"radio\" id=\"h_f\" name=\"humi_mode\" value=\"off\" "));
+    server.sendContent(F("><label for=\"h_o\">ON</label></div><div><input type=\"radio\" id=\"h_f\" name=\"humi_mode\" value=\"off\" "));
     if (humidifierMode == OFF) server.sendContent(F("checked"));
-    server.sendContent(F("><label for=\"h_f\" style=\"font-weight:normal\">OFF</label></div></div></div>"));
+    server.sendContent(F("><label for=\"h_f\">OFF</label></div></div></div>"));
 
     // 히터
-    server.sendContent(F("<div><strong>Heater</strong><div class=\"radio-group\"><div><input type=\"radio\" id=\"he_a\" name=\"heat_mode\" value=\"auto\" "));
+    server.sendContent(F("<div class='manual-item'><strong>Heat</strong><br><div class=\"radio-group\"><div><input type=\"radio\" id=\"he_a\" name=\"heat_mode\" value=\"auto\" "));
     if (heaterMode == AUTO) server.sendContent(F("checked"));
-    server.sendContent(F("><label for=\"he_a\" style=\"font-weight:normal\">AUTO</label></div><div><input type=\"radio\" id=\"he_o\" name=\"heat_mode\" value=\"on\" "));
+    server.sendContent(F("><label for=\"he_a\">AUTO</label></div><div><input type=\"radio\" id=\"he_o\" name=\"heat_mode\" value=\"on\" "));
     if (heaterMode == ON) server.sendContent(F("checked"));
-    server.sendContent(F("><label for=\"he_o\" style=\"font-weight:normal\">ON</label></div><div><input type=\"radio\" id=\"he_f\" name=\"heat_mode\" value=\"off\" "));
+    server.sendContent(F("><label for=\"he_o\">ON</label></div><div><input type=\"radio\" id=\"he_f\" name=\"heat_mode\" value=\"off\" "));
     if (heaterMode == OFF) server.sendContent(F("checked"));
-    server.sendContent(F("><label for=\"he_f\" style=\"font-weight:normal\">OFF</label></div></div></div>"));
+    server.sendContent(F("><label for=\"he_f\">OFF</label></div></div></div>"));
 
     // 팬
-    server.sendContent(F("<div><strong>Fan</strong><div class=\"radio-group\"><div><input type=\"radio\" id=\"f_a\" name=\"fan_mode\" value=\"auto\" "));
+    server.sendContent(F("<div class='manual-item'><strong>Fan</strong><br><div class=\"radio-group\"><div><input type=\"radio\" id=\"f_a\" name=\"fan_mode\" value=\"auto\" "));
     if (fanMode == AUTO) server.sendContent(F("checked"));
-    server.sendContent(F("><label for=\"f_a\" style=\"font-weight:normal\">AUTO</label></div><div><input type=\"radio\" id=\"f_o\" name=\"fan_mode\" value=\"on\" "));
+    server.sendContent(F("><label for=\"f_a\">AUTO</label></div><div><input type=\"radio\" id=\"f_o\" name=\"fan_mode\" value=\"on\" "));
     if (fanMode == ON) server.sendContent(F("checked"));
-    server.sendContent(F("><label for=\"f_o\" style=\"font-weight:normal\">ON</label></div><div><input type=\"radio\" id=\"f_f\" name=\"fan_mode\" value=\"off\" "));
+    server.sendContent(F("><label for=\"f_o\">ON</label></div><div><input type=\"radio\" id=\"f_f\" name=\"fan_mode\" value=\"off\" "));
     if (fanMode == OFF) server.sendContent(F("checked"));
-    server.sendContent(F("><label for=\"f_f\" style=\"font-weight:normal\">OFF</label></div></div></div>"));
+    server.sendContent(F("><label for=\"f_f\">OFF</label></div></div></div>"));
 
     server.sendContent(F("</div></fieldset>"));
     
@@ -2131,10 +2014,26 @@ void handleRemote() {
                          "<a href=\"/dashboard\" class=\"btn-back\">Back to Dashboard</a>"
                          "</form></div>"));
     
-    // JS Logic
-    server.sendContent(F("<script>function f(){fetch('/sensordata').then(r=>{if(!r.ok)throw new Error();return r.json()}).then(d=>{document.getElementById('temp_val').innerText=d.temp;document.getElementById('humi_val').innerText=d.humi}).catch(e=>console.log(e)).finally(()=>{setTimeout(f,2000)})}f();</script></body></html>"));
+    // [핵심 수정] 자바스크립트 업데이트 로직 복구
+    // 1. fetch로 /sensordata 요청
+    // 2. 받아온 json 데이터를 id='temp_val', 'humi_val' 요소에 넣음
+    // 3. 5초마다 반복 (부하 고려)
+    server.sendContent(F("<script>"
+        "function f(){"
+            "fetch('/sensordata')"
+            ".then(r=>{if(!r.ok)throw new Error();return r.json()})"
+            ".then(d=>{"
+                "document.getElementById('temp_val').innerText = d.temp + '°C';"
+                "document.getElementById('humi_val').innerText = d.humi + '%';"
+            "})"
+            ".catch(e=>console.log(e))"
+            ".finally(()=>{setTimeout(f,5000)})" // 5초 후 재실행
+        "}"
+        "f();"
+        "</script></body></html>"));
     server.sendContent(""); 
 }
+
 
 
 
@@ -2291,14 +2190,26 @@ void handleSetTerminal() {
 
 
 
+
+
+
 void handleConfig() {
     server.sendHeader("Connection", "close"); 
 
     server.setContentLength(CONTENT_LENGTH_UNKNOWN);
     server.send(200, "text/html; charset=UTF-8", "");
 
+    // [추가] 시스템 Uptime 계산
+    unsigned long sec = millis() / 1000;
+    int days = sec / 86400;
+    int hours = (sec % 86400) / 3600;
+    int mins = (sec % 3600) / 60;
+
+    // [추가] 메모리 정보 (부하 확인용)
+    uint32_t freeHeap = ESP.getFreeHeap();
+
     server.sendContent(F("<!DOCTYPE html><html><head>"
-        "<title>Network Setup</title>" // [수정] 탭 제목 변경
+        "<title>Network Setup</title>" 
         "<meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>"
         "body{font-family:sans-serif;background-color:#f4f4f4;margin:0;padding:10px;color:#333}"
         ".container{max-width:500px;margin:0 auto;background-color:#fff;padding:15px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,.1)}"
@@ -2314,13 +2225,32 @@ void handleConfig() {
         ".btn-back{background-color:#6c757d;color:#fff;margin-top:10px}"
         ".btn-back:hover{background-color:#5a6268}"
         ".note{font-size:0.75em;color:#d9534f;display:block;text-align:right;grid-column:2;margin-top:-4px}"
+        
+        // [추가] 시스템 정보 스타일
+        ".sys-info{display:flex; justify-content:space-between; font-size:0.9em; color:#555; font-weight:bold; padding:0 5px;}"
+        ".sys-val{color:#007bff;}"
+        
         "</style></head><body><div class=\"container\">"
         
-        "<h2>Network & Admin Setup</h2>" // [수정] 헤드라인 변경
-        
-        "<form method='POST' action='/save'>"));
+        "<h2>Network & Admin Setup</h2>"));
     
     char buffer[1024];
+
+    // [추가] 0. System Status 섹션 (가장 위에 표시)
+    server.sendContent(F("<fieldset><legend>System Status</legend><div class='sys-info'>"));
+    
+    // Uptime 표시
+    snprintf(buffer, sizeof(buffer), "<span>Uptime: <span class='sys-val'>%dd %02dh %02dm</span></span>", days, hours, mins);
+    server.sendContent(buffer);
+
+    // Free Heap 표시 (연결 끊김 진단용)
+    snprintf(buffer, sizeof(buffer), "<span>Free RAM: <span class='sys-val'>%d bytes</span></span>", freeHeap);
+    server.sendContent(buffer);
+    
+    server.sendContent(F("</div></fieldset>"));
+
+
+    server.sendContent(F("<form method='POST' action='/save'>"));
 
     // 1. 관리자 및 AP 설정
     server.sendContent(F("<fieldset><legend>Admin & AP</legend>"));
