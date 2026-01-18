@@ -1,4 +1,4 @@
-// 그래프 X축 그리드 버그 수정
+// 웹페이지 그래프 X축 그리드 버그 수정, Y축 그리드 버그 수정
 /**************************************************************
  * Lizard Cage Monitoring (Stable + Scroll Graph + External AP + Long-term Graph)
  * ESP32 + TFT_eSPI + DHT22 + Rotary Encoder
@@ -1621,98 +1621,6 @@ canvas{width:100%;height:150px;display:block}
 
 
 
-/*
-const char DASHBOARD_PART2[] PROGMEM = R"rawliteral(
-<a href="/config" class="menu-button">Network & Admin</a>
-<a href="/ntpconfig" class="menu-button">Time Sync (NTP)</a>
-<a href="/remote" class="menu-button">Remote Control</a>
-<a href="/sensorconfig" class="menu-button">Device Settings</a>
-<a href="/downloadlog" class="menu-button download-button">Download Log File</a>
-</div><script>
-const cvs=document.getElementById('myChart');const ctx=cvs.getContext('2d');const msgDiv=document.getElementById('chartMsg');
-const curDiv=document.getElementById('curStat'); // 현재값 표시 요소
-let currentRange = 1;
-
-function resizeCanvas(){
-    const p=cvs.parentElement;
-    cvs.width=p.clientWidth*2;
-    cvs.height=300; 
-    cvs.style.width=p.clientWidth+'px';
-    cvs.style.height='150px';
-    ctx.scale(2,2);
-}
-window.addEventListener('resize',()=>{resizeCanvas();drawGraph();});resizeCanvas();
-
-function setRange(r) {
-    currentRange = r;
-    document.querySelectorAll('.ts-btn').forEach(b => {
-        b.classList.remove('active');
-        if(b.innerText === r+'H') b.classList.add('active');
-    });
-    drawGraph();
-}
-
-function drawGraph(){
-    fetch('/graphdata?range=' + currentRange)
-    .then(r=>r.json()).then(d=>{
-        const w=cvs.clientWidth;const h=150;const bMargin=20;const gh=h-bMargin; 
-        
-        ctx.clearRect(0,0,w,h);
-        if(!d||d.length<2){msgDiv.style.display='block';msgDiv.innerText="Waiting for data...";return;}
-        msgDiv.style.display='none';
-        
-        // [추가] 가장 최근 데이터(배열의 마지막)로 현재 상태 갱신
-        const last = d[d.length-1];
-        if(last) {
-            curDiv.innerHTML = `<span style="color:#d9534f">${last.tp.toFixed(1)}°C</span> / <span style="color:#0275d8">${last.hm.toFixed(1)}%</span>`;
-        }
-        
-        let min=100,max=0;d.forEach(v=>{if(v.tp<min)min=v.tp;if(v.tp>max)max=v.tp;if(v.hm<min)min=v.hm;if(v.hm>max)max=v.hm;});
-        min=Math.floor(min-2);max=Math.ceil(max+2);let rng=max-min;if(rng<=0){rng=10;min-=5;}
-
-        // Y축 그리드
-        ctx.strokeStyle='#eee';ctx.lineWidth=1;ctx.beginPath();
-        for(let i=0;i<=4;i++){ 
-            let y=gh-(i*gh/4);
-            ctx.moveTo(0,y);ctx.lineTo(w,y);
-            ctx.fillStyle='#999';ctx.font='10px Arial';
-            ctx.fillText(Math.round(min+(rng*i/4)),2,y-2);
-        }
-        ctx.stroke();
-
-        // X축 그리드
-        ctx.textAlign='center';
-        ctx.beginPath();
-        
-        let gridStepSec = 600; 
-        if (currentRange === 6) gridStepSec = 3600; 
-        if (currentRange === 12) gridStepSec = 7200; 
-        if (currentRange === 24) gridStepSec = 14400; // 4시간 간격
-
-        const startT = d[0].t;
-        const endT = d[d.length-1].t;
-        const totalT = endT - startT;
-
-        let gridT = Math.ceil(startT / gridStepSec) * gridStepSec;
-
-        if (totalT > 0) {
-            while(gridT <= endT) {
-                let x = ((gridT - startT) / totalT) * w;
-                ctx.moveTo(x, 0); ctx.lineTo(x, gh);
-                
-                let dt = new Date(gridT * 1000);
-                let ts = dt.getHours().toString().padStart(2,'0') + ':' + dt.getMinutes().toString().padStart(2,'0');
-                ctx.fillStyle = '#999';
-                ctx.fillText(ts, x, h - 5);
-                
-                gridT += gridStepSec;
-            }
-        }
-        ctx.stroke();
-)rawliteral";
-*/
-
-
 
 
 const char DASHBOARD_PART2[] PROGMEM = R"rawliteral(
@@ -1748,7 +1656,6 @@ function setRange(r) {
 function drawGraph(){
     fetch('/graphdata?range=' + currentRange)
     .then(r=>r.json()).then(d=>{
-        // 레이아웃 여백 설정
         const w=cvs.clientWidth; const h=150; 
         const padL=30; const padR=30; const bMargin=20;
         
@@ -1759,22 +1666,35 @@ function drawGraph(){
         if(!d||d.length<2){msgDiv.style.display='block';msgDiv.innerText="Waiting for data...";return;}
         msgDiv.style.display='none';
         
-        // 최신 데이터값 표시
         const lastData = d[d.length-1];
         if(lastData) {
             curDiv.innerHTML = `<span style="color:#d9534f">${lastData.tp.toFixed(1)}°C</span> / <span style="color:#0275d8">${lastData.hm.toFixed(1)}%</span>`;
         }
         
-        // [핵심] LCD 스타일: 데이터 양과 무관하게 '현재시간' 기준 고정 폭 사용
         const endTime = lastData.t;
         const rangeSec = currentRange * 3600; 
         const startTime = endTime - rangeSec;
 
         let minT=100, maxT=-50, minH=100, maxH=0;
+        
+        // [수정] 이상한 값(-999 등) 필터링 로직 추가
         d.forEach(v=>{
-            if(v.tp<minT) minT=v.tp; if(v.tp>maxT) maxT=v.tp;
-            if(v.hm<minH) minH=v.hm; if(v.hm>maxH) maxH=v.hm;
+            // 온도가 정상 범위(-50 ~ 100)일 때만 최소/최대 계산
+            if(v.tp > -50 && v.tp < 100) {
+                if(v.tp<minT) minT=v.tp; 
+                if(v.tp>maxT) maxT=v.tp;
+            }
+            // 습도가 정상 범위(0 ~ 100)일 때만 계산
+            if(v.hm >= 0 && v.hm <= 100) {
+                if(v.hm<minH) minH=v.hm; 
+                if(v.hm>maxH) maxH=v.hm;
+            }
         });
+        
+        // 데이터가 없거나 전부 에러일 경우를 대비한 기본값 보정
+        if(minT > maxT) { minT=20; maxT=30; } 
+        if(minH > maxH) { minH=40; maxH=60; }
+
         minT=Math.floor(minT-1); maxT=Math.ceil(maxT+1);
         minH=Math.floor(minH-2); maxH=Math.ceil(maxH+2);
         
@@ -1788,7 +1708,7 @@ function drawGraph(){
         
         for(let i=0; i<=4; i++){ 
             let y = gh - (i * gh / 4);
-            ctx.moveTo(padL, y); ctx.lineTo(padL + gw, y); // 가로선
+            ctx.moveTo(padL, y); ctx.lineTo(padL + gw, y); 
             
             ctx.textAlign = 'right';
             ctx.fillStyle = '#d9534f';
@@ -1800,31 +1720,27 @@ function drawGraph(){
         }
         ctx.stroke();
 
-        // [핵심] X축 (시간 격자) - 1H는 무조건 10분 단위
+        // X축 (시간 격자)
         ctx.textAlign='center';
         ctx.textBaseline = 'alphabetic';
         ctx.beginPath();
         
-        let gridStepSec = 600; // 기본 10분
-        if (currentRange === 6) gridStepSec = 3600;   // 6H: 1시간
-        if (currentRange === 12) gridStepSec = 7200;  // 12H: 2시간
-        if (currentRange === 24) gridStepSec = 14400; // 24H: 4시간
+        let gridStepSec = 600; 
+        if (currentRange === 6) gridStepSec = 3600; 
+        if (currentRange === 12) gridStepSec = 7200; 
+        if (currentRange === 24) gridStepSec = 14400;
 
-        // 격자 시작 시간 계산 (startTime보다 큰 첫 번째 '딱 떨어지는 시간')
         let gridT = Math.ceil(startTime / gridStepSec) * gridStepSec;
 
         while(gridT <= endTime) {
-            // 위치 계산: (타겟시간 - 시작시간) / 전체범위
             let x = padL + ((gridT - startTime) / rangeSec) * gw;
             
-            // 그래프 영역 안에 들어오는 선만 그리기
             if (x >= padL && x <= padL + gw) {
-                ctx.moveTo(x, 0); ctx.lineTo(x, gh); // 세로선
+                ctx.moveTo(x, 0); ctx.lineTo(x, gh);
                 
                 let dt = new Date(gridT * 1000);
                 let hStr = dt.getHours().toString().padStart(2,'0');
                 let mStr = dt.getMinutes().toString().padStart(2,'0');
-                // 1시간 이상 단위는 '시:00', 10분 단위는 '시:분'
                 let ts = (gridStepSec >= 3600) ? hStr + ':00' : hStr + ':' + mStr;
                 
                 ctx.fillStyle = '#999';
@@ -1835,33 +1751,6 @@ function drawGraph(){
         ctx.stroke();
 )rawliteral";
 
-
-
-
-
-
-
-/*
-// 그래프 선 그리기
-const char DASHBOARD_PART3[] PROGMEM = R"rawliteral(
-function drawLine(k,c){ctx.beginPath();ctx.strokeStyle=c;ctx.lineWidth=2;ctx.lineJoin='round';const sx=w/(d.length-1);
-d.forEach((v,i)=>{let x=i*sx;let y=gh-((v[k]-min)/rng*gh);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.stroke();}
-drawLine('tp','#d9534f');drawLine('hm','#0275d8');
-}).catch(e=>{console.log(e);msgDiv.style.display='block';msgDiv.innerText="Error";});}
-setTimeout(drawGraph,2000);setInterval(drawGraph,60000);
-</script></body></html>)rawliteral";
-
-void handleDashboard() {
-    server.sendHeader("Connection", "close");
-    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-    server.send(200, "text/html", "");
-    
-    server.sendContent_P(DASHBOARD_PART1);
-    server.sendContent_P(DASHBOARD_PART2);
-    server.sendContent_P(DASHBOARD_PART3);
-    server.sendContent("");
-}
-*/
 
 
 
@@ -2674,80 +2563,6 @@ void ntpUpdate() {
 
 
 
-/*
-void handleGraphData() {
-    esp_task_wdt_reset();
-
-    int hours = 1;
-    if (server.hasArg("range")) {
-        hours = server.arg("range").toInt();
-        if (hours < 1) hours = 1;
-    }
-
-    server.sendHeader("Connection", "close");
-    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-    server.send(200, "application/json", "[");
-
-    // [수정] 24H 오류 해결 로직
-    // 아무리 긴 시간을 요청해도, 실제 버퍼 크기(DISPLAY_MAX_SAMPLES)를 초과해서 계산하면 안 됩니다.
-    
-    int recordsPerHour = 360; // 10초 간격 기준
-    int lookBackCount = hours * recordsPerHour;
-    
-    // [핵심] 요청 범위가 하드웨어 버퍼 한계보다 크면 버퍼 크기로 제한 (Overrun 방지)
-    if (lookBackCount > DISPLAY_MAX_SAMPLES) {
-        lookBackCount = DISPLAY_MAX_SAMPLES;
-    }
-
-    // 실제 쌓인 데이터보다 많이 요청하면 자름
-    int total_available = isDisplayBufferFull ? DISPLAY_MAX_SAMPLES : displayLogIndex;
-    if (lookBackCount > total_available) lookBackCount = total_available;
-
-    int maxSendCount = 72; 
-    int step = lookBackCount / maxSendCount;
-    if (step < 1) step = 1;
-
-    int count = lookBackCount / step;
-    
-    // 시작 인덱스 계산
-    int startIdx = (displayLogIndex + DISPLAY_MAX_SAMPLES - (count * step)) % DISPLAY_MAX_SAMPLES;
-    if (startIdx < 0) startIdx += DISPLAY_MAX_SAMPLES;
-
-    char chunk[256]; 
-    int chunkPos = 0;
-    chunk[0] = '\0';
-    bool first = true;
-    char temp[64]; 
-
-    for (int i = 0; i < count; i++) {
-        int offset = i * step; 
-        int idx = (startIdx + offset) % DISPLAY_MAX_SAMPLES;
-        
-        if (displayLogBuf[idx].ts == 0) continue;
-
-        int len = snprintf(temp, sizeof(temp), "%s{\"t\":%lu,\"tp\":%.1f,\"hm\":%.1f}", 
-                first ? "" : ",", 
-                (unsigned long)displayLogBuf[idx].ts, 
-                displayLogBuf[idx].temp / 10.0f, 
-                displayLogBuf[idx].humi / 10.0f);
-        first = false;
-
-        if (chunkPos + len >= sizeof(chunk) - 1) {
-            server.sendContent(chunk);
-            chunkPos = 0;
-            chunk[0] = '\0';
-        }
-        strcpy(chunk + chunkPos, temp);
-        chunkPos += len;
-    }
-
-    if (chunkPos > 0) server.sendContent(chunk);
-    server.sendContent("]");
-    server.sendContent("");
-}
-*/
-
-
 
 
 void handleGraphData() {
@@ -2763,27 +2578,22 @@ void handleGraphData() {
     server.setContentLength(CONTENT_LENGTH_UNKNOWN);
     server.send(200, "application/json", "[");
 
-    // [수정] 1시간 데이터 개수 자동 계산 (12초 간격이면 300개)
     int recordsPerHour = 3600 / GRAPH_SAMPLE_INTERVAL_SEC; 
     int lookBackCount = hours * recordsPerHour;
     
-    // 버퍼 크기 초과 방지
     if (lookBackCount > DISPLAY_MAX_SAMPLES) {
         lookBackCount = DISPLAY_MAX_SAMPLES;
     }
 
-    // 실제 쌓인 데이터보다 많이 요청하면 자름
     int total_available = isDisplayBufferFull ? DISPLAY_MAX_SAMPLES : displayLogIndex;
     if (lookBackCount > total_available) lookBackCount = total_available;
 
-    // 전송 포인트 72개로 고정 (부하 방지)
     int maxSendCount = 72; 
     int step = lookBackCount / maxSendCount;
     if (step < 1) step = 1;
 
     int count = lookBackCount / step;
     
-    // 시작 인덱스 계산
     int startIdx = (displayLogIndex + DISPLAY_MAX_SAMPLES - (count * step)) % DISPLAY_MAX_SAMPLES;
     if (startIdx < 0) startIdx += DISPLAY_MAX_SAMPLES;
 
@@ -2797,7 +2607,12 @@ void handleGraphData() {
         int offset = i * step; 
         int idx = (startIdx + offset) % DISPLAY_MAX_SAMPLES;
         
-        if (displayLogBuf[idx].ts == 0) continue;
+        // [핵심 수정] 타임스탬프가 0이거나, 온도/습도가 에러값(INVALID_VALUE)이면 건너뜀
+        if (displayLogBuf[idx].ts == 0 || 
+            displayLogBuf[idx].temp == INVALID_VALUE || 
+            displayLogBuf[idx].humi == INVALID_VALUE) {
+            continue;
+        }
 
         int len = snprintf(temp, sizeof(temp), "%s{\"t\":%lu,\"tp\":%.1f,\"hm\":%.1f}", 
                 first ? "" : ",", 
