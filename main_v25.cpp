@@ -1,4 +1,4 @@
-// 웹페이지 그래프 X축 그리드 버그 수정, Y축 그리드 버그 수정
+// 그래프 X축 그리드 버그 수정
 /**************************************************************
  * Lizard Cage Monitoring (Stable + Scroll Graph + External AP + Long-term Graph)
  * ESP32 + TFT_eSPI + DHT22 + Rotary Encoder
@@ -1544,7 +1544,7 @@ void handleRoot(bool error = false) {
 
 
 
-
+/*
 const char DASHBOARD_PART1[] PROGMEM = R"rawliteral(
 <!DOCTYPE html><html><head><title>Dashboard</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
@@ -1560,34 +1560,102 @@ h2{text-align:center;color:#007bff;margin-bottom:0.5em;margin-top:0;}
 canvas{width:100%;height:150px;display:block}
 #chartMsg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#999;font-weight:bold;display:none;font-size:0.9em;}
 
-/* [수정] 상단 헤더 (Live History + 현재값) */
 .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
 .header-row h3 { margin: 0; color: #555; font-size: 1.1em; }
 .cur-val { font-size: 0.9em; font-weight: bold; color: #333; }
 
-/* [수정] 컨트롤 라인 (버튼 + 범례) */
 .ctrl-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
 
-/* [수정] 버튼 스타일: 작고 옅게, 배경 없음 */
 .time-selector { display: flex; gap: 5px; }
 .ts-btn {
     background: transparent; 
     border: none; 
     padding: 2px 6px; 
     cursor: pointer; 
-    color: #ccc;        /* 평소엔 옅은 회색 */
-    font-size: 0.8em;   /* 글자 작게 */
+    color: #ccc;       
+    font-size: 0.8em;   
     font-weight: bold;
     border-radius: 4px;
     transition: 0.2s;
 }
 .ts-btn:hover { color: #888; }
 .ts-btn.active { 
-    color: #007bff;     /* 선택 시 파란 글씨 */
-    background: #eef;   /* 아주 옅은 배경 */
+    color: #007bff;     
+    background: #eef;   
 }
 
-/* [수정] 범례 스타일: 우측 정렬 */
+
+.legend { font-size: 0.8em; }
+.leg-item { display: inline-block; margin-left: 10px; color: #666; }
+.dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+</style></head><body><div class="container"><h2>Device Dashboard</h2>
+
+<div class="chart-container">
+    <div class="header-row">
+        <h3>Live History</h3>
+        <div id="curStat" class="cur-val">Loading...</div>
+    </div>
+
+    <div class="ctrl-row">
+        <div class="time-selector">
+            <button class="ts-btn active" onclick="setRange(1)">1H</button>
+            <button class="ts-btn" onclick="setRange(6)">6H</button>
+            <button class="ts-btn" onclick="setRange(12)">12H</button>
+            <button class="ts-btn" onclick="setRange(24)">24H</button>
+        </div>
+        <div class="legend">
+            <span class="leg-item"><span class="dot" style="background:#d9534f;"></span>Temp</span>
+            <span class="leg-item"><span class="dot" style="background:#0275d8;"></span>Humi</span>
+        </div>
+    </div>
+
+    <canvas id="myChart"></canvas><div id="chartMsg">Loading...</div>
+</div><br>)rawliteral";
+*/
+
+
+
+
+
+const char DASHBOARD_PART1[] PROGMEM = R"rawliteral(
+<!DOCTYPE html><html><head><title>Dashboard</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:-apple-system,system-ui,BlinkMacSystemFont,"Segoe UI","Roboto","Helvetica Neue",Arial,sans-serif;background-color:#f4f4f4;margin:0;padding:10px;color:#333}
+.container{max-width:600px;margin:1em auto;background-color:#fff;padding:1em;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
+h2{text-align:center;color:#007bff;margin-bottom:0.5em;margin-top:0;}
+.menu-button{display:block;width:100%;padding:12px;margin-bottom:10px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:4px;text-align:center;font-weight:bold;box-sizing:border-box;font-size:1em}
+.menu-button:hover{background-color:#0056b3}
+.download-button{background-color:#28a745;margin-top:10px}
+.download-button:hover{background-color:#218838}
+
+/* [수정] 좌우 패딩을 15px -> 5px로 줄여서 그래프가 더 꽉 차게 보이도록 함 */
+.chart-container{margin-top:15px;border:1px solid #ddd;padding:10px 5px;border-radius:4px;background:#fff;position:relative}
+
+canvas{width:100%;height:150px;display:block}
+#chartMsg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#999;font-weight:bold;display:none;font-size:0.9em;}
+
+.header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding: 0 5px; } /* 제목 여백 추가 */
+.header-row h3 { margin: 0; color: #555; font-size: 1.1em; }
+.cur-val { font-size: 0.9em; font-weight: bold; color: #333; }
+
+.ctrl-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; padding-left: 5px; padding-right: 5px;}
+
+.time-selector { display: flex; gap: 5px; }
+.ts-btn {
+    background: transparent; 
+    border: none; 
+    padding: 2px 6px; 
+    cursor: pointer; 
+    color: #ccc;
+    font-size: 0.8em;
+    font-weight: bold;
+    border-radius: 4px;
+    transition: 0.2s;
+}
+.ts-btn:hover { color: #888; }
+.ts-btn.active { color: #007bff; background: #eef; }
+
 .legend { font-size: 0.8em; }
 .leg-item { display: inline-block; margin-left: 10px; color: #666; }
 .dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
@@ -1623,6 +1691,9 @@ canvas{width:100%;height:150px;display:block}
 
 
 
+
+
+/*
 const char DASHBOARD_PART2[] PROGMEM = R"rawliteral(
 <a href="/config" class="menu-button">Network & Admin</a>
 <a href="/ntpconfig" class="menu-button">Time Sync (NTP)</a>
@@ -1750,6 +1821,135 @@ function drawGraph(){
         }
         ctx.stroke();
 )rawliteral";
+*/
+
+
+
+
+
+const char DASHBOARD_PART2[] PROGMEM = R"rawliteral(
+<a href="/config" class="menu-button">Network & Admin</a>
+<a href="/ntpconfig" class="menu-button">Time Sync (NTP)</a>
+<a href="/remote" class="menu-button">Remote Control</a>
+<a href="/sensorconfig" class="menu-button">Device Settings</a>
+<a href="/downloadlog" class="menu-button download-button">Download Log File</a>
+</div><script>
+const cvs=document.getElementById('myChart');const ctx=cvs.getContext('2d');const msgDiv=document.getElementById('chartMsg');
+const curDiv=document.getElementById('curStat');
+let currentRange = 1;
+
+function resizeCanvas(){
+    const p=cvs.parentElement;
+    cvs.width=p.clientWidth*2;
+    cvs.height=300; 
+    cvs.style.width=p.clientWidth+'px';
+    cvs.style.height='150px';
+    ctx.scale(2,2);
+}
+window.addEventListener('resize',()=>{resizeCanvas();drawGraph();});resizeCanvas();
+
+function setRange(r) {
+    currentRange = r;
+    document.querySelectorAll('.ts-btn').forEach(b => {
+        b.classList.remove('active');
+        if(b.innerText === r+'H') b.classList.add('active');
+    });
+    drawGraph();
+}
+
+function drawGraph(){
+    fetch('/graphdata?range=' + currentRange)
+    .then(r=>r.json()).then(d=>{
+        // [수정] 캔버스 내부 여백 조정: 왼쪽 20, 오른쪽 30 (그래프를 왼쪽으로 당김)
+        const w=cvs.clientWidth; const h=150; 
+        const padL=20; const padR=30; const bMargin=20;
+        
+        const gw = w - padL - padR;
+        const gh = h - bMargin; 
+        
+        ctx.clearRect(0,0,w,h);
+        if(!d||d.length<2){msgDiv.style.display='block';msgDiv.innerText="Waiting for data...";return;}
+        msgDiv.style.display='none';
+        
+        const lastData = d[d.length-1];
+        if(lastData) {
+            curDiv.innerHTML = `<span style="color:#d9534f">${lastData.tp.toFixed(1)}°C</span> / <span style="color:#0275d8">${lastData.hm.toFixed(1)}%</span>`;
+        }
+        
+        const endTime = lastData.t;
+        const rangeSec = currentRange * 3600; 
+        const startTime = endTime - rangeSec;
+
+        let minT=100, maxT=-50, minH=100, maxH=0;
+        d.forEach(v=>{
+            // 유효 데이터 범위 체크 (-50 ~ 100도, 0 ~ 100%)
+            if(v.tp > -50 && v.tp < 100) {
+                if(v.tp<minT) minT=v.tp; if(v.tp>maxT) maxT=v.tp;
+            }
+            if(v.hm >= 0 && v.hm <= 100) {
+                if(v.hm<minH) minH=v.hm; if(v.hm>maxH) maxH=v.hm;
+            }
+        });
+        
+        if(minT > maxT) { minT=20; maxT=30; } 
+        if(minH > maxH) { minH=40; maxH=60; }
+
+        minT=Math.floor(minT-1); maxT=Math.ceil(maxT+1);
+        minH=Math.floor(minH-2); maxH=Math.ceil(maxH+2);
+        
+        let rngT = maxT - minT; if(rngT<=0) rngT=5;
+        let rngH = maxH - minH; if(rngH<=0) rngH=10;
+
+        // Y축 (온도/습도)
+        ctx.strokeStyle='#eee'; ctx.lineWidth=1; ctx.beginPath();
+        ctx.font='10px Arial';
+        ctx.textBaseline = 'middle'; 
+        
+        for(let i=0; i<=4; i++){ 
+            let y = gh - (i * gh / 4);
+            ctx.moveTo(padL, y); ctx.lineTo(padL + gw, y); 
+            
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#d9534f';
+            ctx.fillText(Math.round(minT + (rngT * i / 4)), padL - 4, y); // 왼쪽 라벨 위치 조정
+
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#0275d8';
+            ctx.fillText(Math.round(minH + (rngH * i / 4)), w - padR + 4, y);
+        }
+        ctx.stroke();
+
+        // X축 (시간 격자)
+        ctx.textAlign='center';
+        ctx.textBaseline = 'alphabetic';
+        ctx.beginPath();
+        
+        let gridStepSec = 600; 
+        if (currentRange === 6) gridStepSec = 3600; 
+        if (currentRange === 12) gridStepSec = 7200; 
+        if (currentRange === 24) gridStepSec = 14400;
+
+        let gridT = Math.ceil(startTime / gridStepSec) * gridStepSec;
+
+        while(gridT <= endTime) {
+            let x = padL + ((gridT - startTime) / rangeSec) * gw;
+            
+            if (x >= padL && x <= padL + gw) {
+                ctx.moveTo(x, 0); ctx.lineTo(x, gh);
+                
+                let dt = new Date(gridT * 1000);
+                let hStr = dt.getHours().toString().padStart(2,'0');
+                let mStr = dt.getMinutes().toString().padStart(2,'0');
+                let ts = (gridStepSec >= 3600) ? hStr + ':00' : hStr + ':' + mStr;
+                
+                ctx.fillStyle = '#999';
+                ctx.fillText(ts, x, h - 5);
+            }
+            gridT += gridStepSec;
+        }
+        ctx.stroke();
+)rawliteral";
+
 
 
 
