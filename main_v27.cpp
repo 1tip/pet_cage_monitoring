@@ -1,4 +1,4 @@
-// 트리플클릭 기능 추가 등 (화면회전)
+// OTA 펌웨어 업데이트 기능 추가
 /**************************************************************
  * Lizard Cage Monitoring (Stable + Scroll Graph + External AP + Long-term Graph)
  * ESP32 + TFT_eSPI + DHT22 + Rotary Encoder
@@ -15,6 +15,7 @@
  * 웹페이지 Dashboard에 그래프 추가
  * 웹페이지의 그래프는 1분마다 업데이트 - setInterval(drawGraph, 60000);
  * 웹페이지의 온/습도 값은 4초마다 업데이트 - setInterval(updateLiveStatus, 4000);
+ * OTA 펌웨어 업데이트 기능 추가
  ************************************************************/
 
 
@@ -27,12 +28,13 @@
 #include <Preferences.h>
 #include <time.h>
 #include <Wire.h>
+#include <Update.h>             // ESP32 무선랜으로 펌웨어 업데이트하기
 
-#include <esp_task_wdt.h> // [추가] 와치독 타이머 라이브러리
-#define WDT_TIMEOUT 30    // 10초 동안 응답 없으면 재부팅
+#include <esp_task_wdt.h>       // [추가] 와치독 타이머 라이브러리
+#define WDT_TIMEOUT 30          // 10초 동안 응답 없으면 재부팅
 
 
-using namespace fs;           // File 사용 가능
+using namespace fs;             // File 사용 가능
 
 int tempMin = 22;                   // 최소 온도 조건(히터 동작)
 int tempMax = 32;                   // 최대 온도 조건(히터 정지, tempMax 초과시 FAN 동작)
@@ -2449,9 +2451,10 @@ void handleNTPSave() {
 
 
 
+
+
 void handleSensorConfig() {
     server.sendHeader("Connection", "close");
-    
     server.setContentLength(CONTENT_LENGTH_UNKNOWN);
     server.send(200, "text/html; charset=UTF-8", "");
 
@@ -2462,73 +2465,79 @@ void handleSensorConfig() {
         ".container{max-width:600px;margin:0 auto;background-color:#fff;padding:15px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,.1)}"
         "h2{color:#007bff;text-align:center;margin:0 0 15px 0}"
         
-        // 2열 그리드 레이아웃 (PC에선 좌우 배치, 모바일에선 상하 배치)
         ".settings-grid{display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;}"
         "@media (max-width: 500px){ .settings-grid{grid-template-columns:1fr;} }"
 
         "fieldset{border:1px solid #ddd;border-radius:5px;padding:15px;height:100%;box-sizing:border-box;margin:0;}"
         "legend{font-weight:bold;color:#007bff;padding:0 5px;font-size:1.1em;}"
         
-        // 라디오 버튼 박스 스타일
         ".radio-item{display:flex; align-items:center; background:#f9f9f9; border:1px solid #eee; padding:10px; margin-bottom:10px; border-radius:4px; cursor:pointer; transition:background 0.2s;}"
         ".radio-item:hover{background:#eef; border-color:#dde;}"
         ".radio-item input{margin-right:10px; transform:scale(1.2); cursor:pointer;}"
         ".radio-item label{font-weight:bold; cursor:pointer; width:100%;}"
         
-        // 버튼 스타일
         "input[type='submit'], .btn-back{width:100%;padding:12px;border:none;border-radius:4px;font-size:1em;font-weight:bold;margin-top:5px;cursor:pointer;display:block;text-align:center;text-decoration:none;box-sizing:border-box}"
         "input[type='submit']{background-color:#28a745;color:#fff}"
         "input[type='submit']:hover{background-color:#218838}"
         ".btn-back{background-color:#6c757d;color:#fff;margin-top:10px}"
         ".btn-back:hover{background-color:#5a6268}"
+
+        /* [추가] 작고 심플한 F/W Update 버튼 스타일 */
+        ".btn-fw { text-decoration: none; background-color: #6c757d; color: white; padding: 5px 12px; border-radius: 4px; font-size: 0.85em; font-weight: bold; transition: 0.2s; }"
+        ".btn-fw:hover { background-color: #5a6268; }"
+        ".etc-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; }"
+
         "</style></head><body><div class=\"container\">"
     
     "<h2>Device Settings</h2>"
     
     "<form method='POST' action='/sensorsave'>"
-    
-    // 그리드 시작
     "<div class='settings-grid'>"));
 
-    // --- 1. 센서 설정 (좌측) ---
+    // --- 1. 센서 설정 ---
     server.sendContent(F("<fieldset><legend>Sensor Model</legend>"));
-    
-    // SHT41 Option
     server.sendContent(F("<div class='radio-item'><input type='radio' id='s1' name='sensorType' value='SHT41' "));
     if (sensorSel == "SHT41") server.sendContent(F("checked"));
     server.sendContent(F("><label for='s1'>SHT41</label></div>"));
     
-    // AHT20 Option
     server.sendContent(F("<div class='radio-item'><input type='radio' id='s2' name='sensorType' value='AHT20' "));
     if (sensorSel == "AHT20") server.sendContent(F("checked"));
     server.sendContent(F("><label for='s2'>AHT20 + BMP280</label></div>"));
-    
     server.sendContent(F("</fieldset>"));
 
-    // --- 2. 화면 회전 설정 (우측) ---
+    // --- 2. 화면 회전 설정 ---
     server.sendContent(F("<fieldset><legend>Screen Orientation</legend>"));
-    
-    // Portrait Option
     server.sendContent(F("<div class='radio-item'><input type='radio' id='r1' name='rotation' value='0' "));
     if (screenRotation == 0) server.sendContent(F("checked"));
     server.sendContent(F("><label for='r1'>Portrait (Vertical)</label></div>"));
 
-    // Landscape Option
     server.sendContent(F("<div class='radio-item'><input type='radio' id='r2' name='rotation' value='1' "));
     if (screenRotation == 1) server.sendContent(F("checked"));
     server.sendContent(F("><label for='r2'>Landscape (Horizontal)</label></div>"));
-    
     server.sendContent(F("</fieldset>"));
-    
-    // 그리드 끝
-    server.sendContent(F("</div>")); 
 
-    // 하단 버튼
-    server.sendContent(F("<input type='submit' value='Save Settings'>"
-                         "<a href='/dashboard' class='btn-back'>Back to Dashboard</a>"
-                         "</form></div></body></html>"));
+    // --- [수정] 3. ETC (펌웨어 업데이트) ---
+    // 기존 설정들과 같은 fieldset 디자인을 사용하되, 내용은 심플하게 구성
+    server.sendContent(F("<fieldset><legend>ETC</legend>"
+        "<div class='etc-row'>"
+        "<span style='color:#555; font-weight:bold; font-size:0.9em;'>System Firmware</span>"
+        "<a href='/update' class='btn-fw'>F/W Update</a>"
+        "</div>"
+        "</fieldset>"));
+    
+    server.sendContent(F("</div>")); // 그리드 끝
+
+    // 하단 저장 버튼
+    server.sendContent(F("<input type='submit' value='Save Settings'></form>"));
+
+    // 뒤로가기 버튼
+    server.sendContent(F("<a href='/dashboard' class='btn-back'>Back to Dashboard</a>"
+                         "</div></body></html>"));
     server.sendContent(""); 
 }
+
+
+
 
 
 
@@ -2772,6 +2781,105 @@ void handleGraphData() {
 
 
 
+
+
+
+
+// 무선랜으로 펌웨어 업데이트하기 페이지 (HTML 폼)
+void handleUpdate() {
+  server.sendHeader("Connection", "close");
+  server.send(200, "text/html", "<form method='POST' action='/update' enctype='multipart/form-data'><input type='file' name='update'><input type='submit' value='Update'></form>");
+}
+
+
+
+
+// [추가] 실제 바이너리 파일 업로드 및 플래싱 처리
+void handleUpdateUpload() {
+  HTTPUpload& upload = server.upload();
+  
+  if (upload.status == UPLOAD_FILE_START) {
+    Serial.printf("Update: %s\n", upload.filename.c_str());
+    // 공간 확인 및 업데이트 시작
+    if (!Update.begin(UPDATE_SIZE_UNKNOWN)) { 
+      Update.printError(Serial);
+    }
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    // 파일 쓰기 (이때 와치독 리셋 필요)
+    esp_task_wdt_reset(); 
+    if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+      Update.printError(Serial);
+    }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    // 업데이트 종료 및 검증
+    if (Update.end(true)) { 
+      Serial.printf("Update Success: %u\nRebooting...\n", upload.totalSize);
+    } else {
+      Update.printError(Serial);
+    }
+  }
+}
+
+
+
+// [추가] 업데이트 완료 후 처리
+void handleUpdateResult() {
+  server.sendHeader("Connection", "close");
+  server.send(200, "text/html", "<!DOCTYPE html><html><body><center><h2>Update Success!</h2><p>Rebooting...</p><a href='/dashboard'>Go Home</a></center></body></html>");
+  delay(1000);
+  ESP.restart();
+}
+
+
+
+
+
+// [추가] 독립된 펌웨어 업데이트 페이지 UI
+void handleUpdatePage() {
+  server.sendHeader("Connection", "close");
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "text/html; charset=UTF-8", "");
+
+  server.sendContent(F("<!DOCTYPE html><html><head><title>Firmware Update</title>"
+    "<meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<style>"
+    "body{font-family:sans-serif;background-color:#f4f4f4;margin:0;padding:10px;color:#333;text-align:center}"
+    ".container{max-width:500px;margin:20px auto;background-color:#fff;padding:20px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,.1)}"
+    "h2{color:#d9534f;margin-bottom:20px}"
+    "p{font-size:1em;color:#666;margin-bottom:20px}"
+    
+    /* 파일 선택 버튼 스타일 */
+    "input[type='file'] { width: 100%; padding: 10px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 20px; box-sizing: border-box; }"
+    
+    /* 업로드 버튼 스타일 (빨간색) */
+    "input[type='submit'] { width: 100%; padding: 15px; border: none; border-radius: 4px; font-size: 1.1em; font-weight: bold; cursor: pointer; color: #fff; background-color: #d9534f; transition:0.3s; }"
+    "input[type='submit']:hover { background-color: #c9302c; }"
+    
+    /* 뒤로가기 버튼 스타일 (회색) */
+    ".btn-back { display: block; width: 100%; padding: 12px; margin-top: 15px; text-decoration: none; background-color: #6c757d; color: #fff; border-radius: 4px; font-weight: bold; box-sizing: border-box; }"
+    ".btn-back:hover { background-color: #5a6268; }"
+    
+    "</style></head><body><div class=\"container\">"
+    
+    "<h2>Firmware Update</h2>"
+    
+    "<form method='POST' action='/update' enctype='multipart/form-data'>"
+    "<p>Select <b>.bin</b> file to update firmware.</p>"
+    "<input type='file' name='update' accept='.bin' required>"
+    "<input type='submit' value='Upload & Update'>"
+    "</form>"
+    
+    "<a href='/sensorconfig' class='btn-back'>Cancel & Back</a>"
+    
+    "</div></body></html>"));
+    
+  server.sendContent("");
+}
+
+
+
+
+
 // =========================================
 void setup() {
 
@@ -2916,7 +3024,23 @@ void setup() {
   server.on("/downloadlog", HTTP_GET, handleDownloadLog);
   server.on("/sensordata", HTTP_GET, handleSensorData);
   server.on("/graphdata", HTTP_GET, handleGraphData);               // [추가] 그래프 데이터 요청
+
+  /*
+  server.on("/update", HTTP_GET, handleUpdate);                     //  무선랜으로 펌웨어 업데이트하기
+  server.on("/update", HTTP_POST, []() {
+    server.sendHeader("Connection", "close");
+    server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
+    ESP.restart();
+  }, handleUpdateUpload);
+  */
+
+  server.on("/graphdata", HTTP_GET, handleGraphData);           // 1. GET 요청: 업데이트 UI 페이지 보여주기
+  server.on("/update", HTTP_GET, handleUpdatePage);
+  server.on("/update", HTTP_POST, handleUpdateResult, handleUpdateUpload);      // 2. POST 요청: 실제 파일 업로드 및 플래싱 처리 (완료 후 handleUpdateResult 호출)
+
   server.begin();
+
+
   delay(50);
   if (savedSsid.length() > 0) {
     WiFi.begin(savedSsid.c_str(), savedPass.c_str());
