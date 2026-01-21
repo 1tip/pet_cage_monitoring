@@ -5,7 +5,7 @@
 mqtt:
   # 1. 온도 센서
   sensor:
-    - name: "Lizard Cage2 Temperature"
+    - name: "Temperature"
       state_topic: "cage2/temp"
       unit_of_measurement: "°C"
       device_class: temperature
@@ -18,7 +18,7 @@ mqtt:
         manufacturer: "Custom DIY"
 
     # 2. 습도 센서
-    - name: "Lizard Cage2 Humidity"
+    - name: "Humidity"
       state_topic: "cage2/humi"
       unit_of_measurement: "%"
       device_class: humidity
@@ -28,7 +28,7 @@ mqtt:
 
   # 3. 장치 작동 상태
   binary_sensor:
-    - name: "Lizard Cage2 Humidifier State"
+    - name: "Humidifier State"
       state_topic: "cage2/humidifier"
       payload_on: "1"
       payload_off: "0"
@@ -37,7 +37,7 @@ mqtt:
       # [추가] 기기 정보 연결
       device: *cage2_device_info
 
-    - name: "Lizard Cage2 Heater State"
+    - name: "Heater State"
       state_topic: "cage2/heater"
       payload_on: "1"
       payload_off: "0"
@@ -46,7 +46,7 @@ mqtt:
       # [추가] 기기 정보 연결
       device: *cage2_device_info
 
-    - name: "Lizard Cage2 Fan State"
+    - name: "Fan State"
       state_topic: "cage2/fan"
       payload_on: "1"
       payload_off: "0"
