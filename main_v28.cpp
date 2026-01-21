@@ -1,4 +1,4 @@
-// OTA 펌웨어 업데이트 기능 추가
+// MQTT 기능 추가2
 /**************************************************************
  * Lizard Cage Monitoring (Stable + Scroll Graph + External AP + Long-term Graph)
  * ESP32 + TFT_eSPI + DHT22 + Rotary Encoder
@@ -16,25 +16,62 @@
  * 웹페이지의 그래프는 1분마다 업데이트 - setInterval(drawGraph, 60000);
  * 웹페이지의 온/습도 값은 4초마다 업데이트 - setInterval(updateLiveStatus, 4000);
  * OTA 펌웨어 업데이트 기능 추가
+ * MQTT 기능 추가 (cage/temp, cage/humi, cage/himidifier, cage/heater, cage/fan) (cage == loginUser)
  ************************************************************/
 
 
 #include <Arduino.h>
 #include <LittleFS.h>
 #include <TFT_eSPI.h>
-//#include "Fonts/FreeSansBold12pt7b.h"
+//#include "Fonts/FreeSansBold12pt7b.h"                 // 폰트 내장됨
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Preferences.h>
 #include <time.h>
 #include <Wire.h>
 #include <Update.h>             // ESP32 무선랜으로 펌웨어 업데이트하기
+#include <PubSubClient.h>       // [추가] MQTT 라이브러리
 
 #include <esp_task_wdt.h>       // [추가] 와치독 타이머 라이브러리
 #define WDT_TIMEOUT 30          // 10초 동안 응답 없으면 재부팅
 
 
 using namespace fs;             // File 사용 가능
+
+
+
+
+// ================== MQTT Configuration [수정] ==================
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+// 설정값 저장 변수
+String mqttBroker = "";
+int mqttPort = 1883;
+String mqttUser = "";
+String mqttPass = "";
+
+// 기능 제어 변수
+bool mqttEnabled = false;           // MQTT 기능 활성화 여부
+int mqttIntervalSec = 30;           // 전송 주기 (초 단위, 기본 30초)
+
+// 전송 항목 선택 플래그
+bool mqttSendTemp = false;
+bool mqttSendHumi = false;
+bool mqttSendHumidifier = false;
+bool mqttSendHeater = false;
+bool mqttSendFan = false;
+
+// 타이머 및 상태 관리
+unsigned long lastMqttPublish = 0;
+String lastMqttStatusMsg = "None";  // 웹 표시용 마지막 상태 메시지 ("Success", "Fail", "Disconnected")
+unsigned long lastMqttSuccessTime = 0; // 마지막 성공 타임스탬프
+
+//const char* mqttTopicPrefix = "cage"; 
+// ===============================================================
+
+
+
 
 int tempMin = 22;                   // 최소 온도 조건(히터 동작)
 int tempMax = 32;                   // 최대 온도 조건(히터 정지, tempMax 초과시 FAN 동작)
@@ -166,8 +203,8 @@ float currentHumi = 0;
 bool timeSynced = false;
 
 // ---------- ESP32 AP ----------
-#define AP_SSID "Cage2"
-#define AP_PASSWORD "cage1234"
+//#define AP_SSID "cage"
+//#define AP_PASSWORD "cage1234"
 IPAddress apIP(192,168,2,1);
 
 // [추가] WiFi 접속 정보를 저장할 전역 변수
@@ -175,7 +212,7 @@ String savedSsid = "";
 String savedPass = "";
 
 // [추가] 로그인 ID/PW 및 AP 설정용 전역 변수
-String loginUser = "Cage";      // 기본값
+String loginUser = "cage";      // 기본값
 String loginPass = "cage1234";  // 기본값
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -301,6 +338,45 @@ void drawGraph();
 void checkHumidity();
 void checkTemperature();
 void handleDashboard();
+
+// [기존 누락된 선언 추가 및 MQTT 선언 추가]
+void updateLayout();
+void initFlashStorage();
+void loadDataForDisplay();
+void pushToDisplayBuffer(float t, float h);
+void drawTitle();
+void updateGraphTimeScale();
+void drawGraphFrame();
+void drawConditionFace();
+void drawStatusIcons();
+void drawSpinningFan(int centerX, int centerY, int radius, uint16_t color);
+
+// 웹 핸들러 선언
+//void handleRoot(bool error = false);
+void handleLogin();
+void handleConfig();
+void handleNTPConfig();
+void handleRemote();
+void handleSetTerminal();
+void handleSensorConfig();
+void handleSensorSave();
+void handleSave();
+void handleNTPSave();
+void handleDownloadLog();
+void handleSensorData();
+void handleGraphData();
+
+// 업데이트(OTA) 관련 선언
+void handleUpdatePage();
+void handleUpdateUpload();
+void handleUpdateResult();
+
+// [추가] MQTT 관련 함수 선언
+void handleMQTTConfig();    // 설정 페이지
+void handleMQTTSave();      // 설정 저장
+void handleMQTT();          // 통신 루프
+
+
 
 
 
@@ -1689,11 +1765,10 @@ canvas{width:100%;height:150px;display:block}
 
 
 
-
-
 const char DASHBOARD_PART2[] PROGMEM = R"rawliteral(
 <a href="/config" class="menu-button">Network & Admin</a>
 <a href="/ntpconfig" class="menu-button">Time Sync (NTP)</a>
+<a href="/mqttconfig" class="menu-button">MQTT Setup</a>
 <a href="/remote" class="menu-button">Remote Control</a>
 <a href="/sensorconfig" class="menu-button">Device Settings</a>
 <a href="/downloadlog" class="menu-button download-button">Download Log File</a>
@@ -2706,6 +2781,326 @@ void ntpUpdate() {
 
 
 
+
+
+// [수정] MQTT 설정 페이지 핸들러 (상태표시, Enable, Interval 추가)
+void handleMQTTConfig() {
+    server.sendHeader("Connection", "close");
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server.send(200, "text/html; charset=UTF-8", "");
+
+    // 마지막 성공 시간 포맷팅
+    char timeStr[30] = "Never";
+    if (lastMqttSuccessTime > 0) {
+        struct tm *timeinfo = localtime((time_t *)&lastMqttSuccessTime);
+        strftime(timeStr, sizeof(timeStr), "%H:%M:%S", timeinfo);
+    }
+
+    server.sendContent(F("<!DOCTYPE html><html><head><title>MQTT Setup</title><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>"
+        "body{font-family:sans-serif;background-color:#f4f4f4;margin:0;padding:10px;color:#333}"
+        ".container{max-width:500px;margin:0 auto;background-color:#fff;padding:15px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,.1)}"
+        "h2{text-align:center;color:#007bff;margin:0 0 15px 0;font-size:1.4em}"
+        "fieldset{border:1px solid #ddd;border-radius:5px;padding:10px;margin-bottom:10px}"
+        "legend{font-size:1em;font-weight:bold;color:#007bff;padding:0 5px}"
+        ".input-group{display:grid;grid-template-columns:1fr 2fr;gap:8px;align-items:center;margin-bottom:8px}"
+        "label{text-align:right;font-size:0.9em;font-weight:bold}"
+        "input[type='text'],input[type='number'],input[type='password']{width:100%;padding:6px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;font-size:0.9em}"
+        
+        ".checkbox-group{display:flex; flex-direction:column; gap:5px; margin-left: 20px;}"
+        ".checkbox-item{display:flex; align-items:center;}"
+        ".checkbox-item input{margin-right:10px; transform:scale(1.2);}"
+        ".checkbox-item label{font-weight:bold; cursor:pointer;}"
+        
+        // 라디오 버튼 그룹 스타일
+        ".radio-group{display:flex; gap:15px; align-items:center;}"
+        ".radio-item{display:flex; align-items:center; cursor:pointer;}"
+        ".radio-item input{margin-right:5px;}"
+
+        // 상태 표시 박스 스타일
+        ".status-box{background:#e9ecef; padding:10px; border-radius:5px; margin-bottom:15px; text-align:center; font-size:0.9em;}"
+        ".st-label{font-weight:bold; color:#666;} .st-val{font-weight:bold; color:#d9534f;}"
+        ".st-success{color:#28a745;}" // 성공 시 초록색
+
+        "input[type='submit'], .btn-back{width:100%;padding:10px;border:none;border-radius:4px;font-size:1em;font-weight:bold;margin-top:5px;cursor:pointer;display:block;text-align:center;text-decoration:none;box-sizing:border-box}"
+        "input[type='submit']{background-color:#28a745;color:#fff}"
+        "input[type='submit']:hover{background-color:#218838}"
+        ".btn-back{background-color:#6c757d;color:#fff;margin-top:10px}"
+        ".btn-back:hover{background-color:#5a6268}"
+        
+        "</style></head><body><div class=\"container\"><h2>MQTT Setup</h2>"));
+
+    // [추가] 상태 표시 박스 (한 줄로 변경)
+    char statusBuf[256];
+    String statusColorClass = (client.connected()) ? "st-success" : "st-val";
+    
+    // 수정 포인트: <br> 제거하고 &nbsp; | &nbsp; (구분선) 추가
+    snprintf(statusBuf, sizeof(statusBuf), 
+        "<div class='status-box'>"
+        "<span class='st-label'>Status: </span><span class='%s'>%s</span>"
+        " &nbsp;&nbsp;|&nbsp;&nbsp; " 
+        "<span class='st-label'>Last Success: </span><span>%s</span>"
+        "</div>", 
+        statusColorClass.c_str(), lastMqttStatusMsg.c_str(), timeStr);
+        
+    server.sendContent(statusBuf);
+
+    server.sendContent(F("<form method='POST' action='/mqttsave'>"));
+
+    char buffer[512];
+
+    // [추가] 0. 기능 활성화 (Enable/Disable)
+    server.sendContent(F("<fieldset><legend>Function Control</legend>"));
+    server.sendContent(F("<div class='input-group'><label>MQTT</label><div class='radio-group'>"));
+    
+    server.sendContent(F("<div class='radio-item'><input type='radio' name='enable' value='1' id='e_on' "));
+    if (mqttEnabled) server.sendContent(F("checked"));
+    server.sendContent(F("><label for='e_on'>Enable</label></div>"));
+
+    server.sendContent(F("<div class='radio-item'><input type='radio' name='enable' value='0' id='e_off' "));
+    if (!mqttEnabled) server.sendContent(F("checked"));
+    server.sendContent(F("><label for='e_off'>Disable</label></div>"));
+    
+    server.sendContent(F("</div></div>"));
+
+    // [추가] Interval 설정
+    snprintf(buffer, sizeof(buffer), 
+        "<div class='input-group'><label>Interval (sec)</label><input name='interval' type='number' min='5' max='3600' value='%d'></div>",
+        mqttIntervalSec);
+    server.sendContent(buffer);
+    server.sendContent(F("</fieldset>"));
+
+
+    // 1. 브로커 설정
+    server.sendContent(F("<fieldset><legend>Broker Settings</legend>"));
+    snprintf(buffer, sizeof(buffer), 
+        "<div class='input-group'><label>Broker IP</label><input name='broker' type='text' value='%s' placeholder='ex) 192.168.0.100'></div>"
+        "<div class='input-group'><label>Port</label><input name='port' type='number' value='%d'></div>"
+        "<div class='input-group'><label>User</label><input name='user' type='text' value='%s'></div>"
+        "<div class='input-group'><label>Password</label><input name='pass' type='password' value='%s'></div>",
+        mqttBroker.c_str(), mqttPort, mqttUser.c_str(), mqttPass.c_str());
+    server.sendContent(buffer);
+    server.sendContent(F("</fieldset>"));
+
+    // 2. 전송 데이터 선택
+    server.sendContent(F("<fieldset><legend>Select Data to Send</legend><div class='checkbox-group'>"));
+    
+    server.sendContent(F("<div class='checkbox-item'><input type='checkbox' name='chk_temp' id='ct' value='1' "));
+    if (mqttSendTemp) server.sendContent(F("checked"));
+    server.sendContent(F("><label for='ct'>Temperature</label></div>"));
+
+    server.sendContent(F("<div class='checkbox-item'><input type='checkbox' name='chk_humi' id='ch' value='1' "));
+    if (mqttSendHumi) server.sendContent(F("checked"));
+    server.sendContent(F("><label for='ch'>Humidity</label></div>"));
+
+    server.sendContent(F("<div class='checkbox-item'><input type='checkbox' name='chk_humidifier' id='chum' value='1' "));
+    if (mqttSendHumidifier) server.sendContent(F("checked"));
+    server.sendContent(F("><label for='chum'>Humidifier State (1/0)</label></div>"));
+
+    server.sendContent(F("<div class='checkbox-item'><input type='checkbox' name='chk_heater' id='cheat' value='1' "));
+    if (mqttSendHeater) server.sendContent(F("checked"));
+    server.sendContent(F("><label for='cheat'>Heater State (1/0)</label></div>"));
+
+    server.sendContent(F("<div class='checkbox-item'><input type='checkbox' name='chk_fan' id='cfan' value='1' "));
+    if (mqttSendFan) server.sendContent(F("checked"));
+    server.sendContent(F("><label for='cfan'>Fan State (1/0)</label></div>"));
+
+    server.sendContent(F("</div></fieldset>"));
+
+    server.sendContent(F("<input type='submit' value='Save Settings'>"
+                         "<a href='/dashboard' class='btn-back'>Back to Dashboard</a>"
+                         "</form></div></body></html>"));
+    server.sendContent("");
+}
+
+
+
+
+
+
+
+
+
+
+
+// [수정] MQTT 설정 저장 핸들러 (Enable, Interval 처리 포함)
+void handleMQTTSave() {
+    // 1. 활성화 및 주기 설정 읽기
+    if (server.hasArg("enable")) {
+        mqttEnabled = (server.arg("enable").toInt() == 1);
+    }
+    if (server.hasArg("interval")) {
+        mqttIntervalSec = server.arg("interval").toInt();
+        if (mqttIntervalSec < 5) mqttIntervalSec = 5; // 최소 5초 제한
+    }
+
+    // 2. 브로커 설정 읽기
+    mqttBroker = server.arg("broker");
+    mqttPort = server.arg("port").toInt();
+    if(mqttPort <= 0) mqttPort = 1883;
+    mqttUser = server.arg("user");
+    mqttPass = server.arg("pass");
+
+    // 3. 체크박스 처리
+    mqttSendTemp = server.hasArg("chk_temp");
+    mqttSendHumi = server.hasArg("chk_humi");
+    mqttSendHumidifier = server.hasArg("chk_humidifier");
+    mqttSendHeater = server.hasArg("chk_heater");
+    mqttSendFan = server.hasArg("chk_fan");
+
+    // 4. Preferences에 저장
+    preferences.begin("mqtt", false);
+    preferences.putBool("enable", mqttEnabled);     // [추가]
+    preferences.putInt("interval", mqttIntervalSec); // [추가]
+    
+    preferences.putString("broker", mqttBroker);
+    preferences.putInt("port", mqttPort);
+    preferences.putString("user", mqttUser);
+    preferences.putString("pass", mqttPass);
+    
+    preferences.putBool("st", mqttSendTemp);
+    preferences.putBool("sh", mqttSendHumi);
+    preferences.putBool("shm", mqttSendHumidifier);
+    preferences.putBool("sht", mqttSendHeater);
+    preferences.putBool("sf", mqttSendFan);
+    preferences.end();
+
+    // 설정 적용: 활성화 상태라면 바로 서버 설정 갱신
+    if (mqttEnabled) {
+        client.setServer(mqttBroker.c_str(), mqttPort);
+    } else {
+        // 비활성화 시 즉시 연결 끊기
+        if(client.connected()) client.disconnect();
+    }
+
+    server.send_P(200,"text/html; charset=UTF-8", SAVE_SUCCESS_PAGE);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// [수정] MQTT 연결 관리 및 데이터 전송 루프
+void handleMQTT() {
+    // 1. 비활성화 상태면 연결 끊고 종료
+    if (!mqttEnabled) {
+        if (client.connected()) {
+            client.disconnect();
+            lastMqttStatusMsg = "Disabled";
+        }
+        return; 
+    }
+
+    // 2. 브로커 주소가 없으면 종료
+    if (mqttBroker.length() == 0) {
+        lastMqttStatusMsg = "No Broker IP";
+        return;
+    }
+
+    unsigned long now = millis();
+
+    // 3. 연결 관리 (비차단 방식)
+    if (!client.connected()) {
+        lastMqttStatusMsg = "Disconnected"; 
+        
+        static unsigned long lastReconnectAttempt = 0;
+        if (now - lastReconnectAttempt > 5000) { 
+            lastReconnectAttempt = now;
+            
+            // Client ID를 'Admin & AP' 설정의 ID(loginUser)로 사용
+            String clientId = loginUser;
+            if (clientId.length() == 0) clientId = "Lizard-" + String(random(0xffff), HEX);
+            
+            bool connected = false;
+            if (mqttUser.length() > 0) {
+                connected = client.connect(clientId.c_str(), mqttUser.c_str(), mqttPass.c_str());
+            } else {
+                connected = client.connect(clientId.c_str());
+            }
+            
+            if (connected) {
+                lastMqttStatusMsg = "Connected";
+            } else {
+                lastMqttStatusMsg = "Conn Fail (Err:" + String(client.state()) + ")";
+            }
+        }
+    } else {
+        // 4. 연결된 상태: 루프 실행 및 데이터 전송
+        client.loop(); 
+
+        if (now - lastMqttPublish >= (mqttIntervalSec * 1000UL)) {
+            lastMqttPublish = now;
+            
+            char topic[64];
+            char payload[16];
+            bool sentSomething = false;
+
+            // [핵심 변경] mqttTopicPrefix 대신 loginUser.c_str() 사용
+            // 예: loginUser가 "Cage2"라면 -> "Cage2/temp" 로 전송됨
+
+            // 온도 전송
+            if (mqttSendTemp && !isnan(lastTemp)) {
+                snprintf(topic, sizeof(topic), "%s/temp", loginUser.c_str()); 
+                snprintf(payload, sizeof(payload), "%.1f", lastTemp);
+                client.publish(topic, payload);
+                sentSomething = true;
+            }
+            // 습도 전송
+            if (mqttSendHumi && !isnan(lastHumi)) {
+                snprintf(topic, sizeof(topic), "%s/humi", loginUser.c_str());
+                snprintf(payload, sizeof(payload), "%.1f", lastHumi);
+                client.publish(topic, payload);
+                sentSomething = true;
+            }
+            // 가습기 상태
+            if (mqttSendHumidifier) {
+                snprintf(topic, sizeof(topic), "%s/humidifier", loginUser.c_str());
+                client.publish(topic, (digitalRead(HUMIDIFIER_PWR) == HIGH) ? "1" : "0");
+                sentSomething = true;
+            }
+            // 히터 상태
+            if (mqttSendHeater) {
+                snprintf(topic, sizeof(topic), "%s/heater", loginUser.c_str());
+                client.publish(topic, (digitalRead(HEATER_PIN) == HIGH) ? "1" : "0");
+                sentSomething = true;
+            }
+            // 팬 상태
+            if (mqttSendFan) {
+                snprintf(topic, sizeof(topic), "%s/fan", loginUser.c_str());
+                client.publish(topic, (digitalRead(FAN_PIN) == HIGH) ? "1" : "0");
+                sentSomething = true;
+            }
+
+            // 전송 결과 업데이트
+            if (sentSomething) {
+                lastMqttStatusMsg = "Published OK";
+                lastMqttSuccessTime = time(nullptr); 
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 void handleGraphData() {
     esp_task_wdt_reset();
 
@@ -2969,7 +3364,7 @@ void setup() {
   savedPass = preferences.getString("password", "");
 
   // [추가] 저장된 로그인 정보 불러오기 (없으면 기본값 사용)
-  loginUser = preferences.getString("loginUser", "Cage");
+  loginUser = preferences.getString("loginUser", "cage");
   loginPass = preferences.getString("loginPass", "cage1234");
 
   
@@ -2981,6 +3376,43 @@ void setup() {
   else if (savedNtpMode == "builtin2") strcpy(ntpServer, "time.kriss.re.kr");
   else if (savedCustomNtp.length() > 0) savedCustomNtp.toCharArray(ntpServer, sizeof(ntpServer));
   else strcpy(ntpServer, "time.bora.net");
+
+
+
+
+
+
+  // [추가] MQTT 설정 불러오기
+  preferences.begin("mqtt", true);
+  
+  // [추가] 활성화 여부 및 주기 불러오기
+  mqttEnabled = preferences.getBool("enable", false); // 기본값 false(비활성)
+  mqttIntervalSec = preferences.getInt("interval", 30); // 기본값 30초
+
+  mqttBroker = preferences.getString("broker", "");
+  mqttPort = preferences.getInt("port", 1883);
+  mqttUser = preferences.getString("user", "");
+  mqttPass = preferences.getString("pass", "");
+  
+  mqttSendTemp = preferences.getBool("st", false);
+  mqttSendHumi = preferences.getBool("sh", false);
+  mqttSendHumidifier = preferences.getBool("shm", false);
+  mqttSendHeater = preferences.getBool("sht", false);
+  mqttSendFan = preferences.getBool("sf", false);
+  preferences.end();
+
+  // 활성화 되어 있을 때만 서버 세팅
+  if (mqttEnabled && mqttBroker.length() > 0) {
+      client.setServer(mqttBroker.c_str(), mqttPort);
+  }
+  
+
+
+
+
+
+
+
 
 
   
@@ -3016,27 +3448,23 @@ void setup() {
   server.on("/config", HTTP_GET, handleConfig);
   server.on("/ntpconfig", HTTP_GET, handleNTPConfig);
   server.on("/remote", HTTP_GET, handleRemote);
-  server.on("/setterminal", HTTP_POST, handleSetTerminal);          // (가습기,히터,팬 통합)
+  server.on("/setterminal", HTTP_POST, handleSetTerminal);                      // (가습기,히터,팬 통합)
   server.on("/sensorconfig", HTTP_GET, handleSensorConfig);
   server.on("/sensorsave", HTTP_POST, handleSensorSave);
   server.on("/save", HTTP_POST, handleSave);
   server.on("/ntpsave", HTTP_POST, handleNTPSave);
   server.on("/downloadlog", HTTP_GET, handleDownloadLog);
   server.on("/sensordata", HTTP_GET, handleSensorData);
-  server.on("/graphdata", HTTP_GET, handleGraphData);               // [추가] 그래프 데이터 요청
+  server.on("/graphdata", HTTP_GET, handleGraphData);                           // [추가] 그래프 데이터 요청
 
-  /*
-  server.on("/update", HTTP_GET, handleUpdate);                     //  무선랜으로 펌웨어 업데이트하기
-  server.on("/update", HTTP_POST, []() {
-    server.sendHeader("Connection", "close");
-    server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
-    ESP.restart();
-  }, handleUpdateUpload);
-  */
 
-  server.on("/graphdata", HTTP_GET, handleGraphData);           // 1. GET 요청: 업데이트 UI 페이지 보여주기
-  server.on("/update", HTTP_GET, handleUpdatePage);
+  server.on("/graphdata", HTTP_GET, handleGraphData);                           // 1. GET 요청: 업데이트 UI 페이지 보여주기
+  server.on("/update", HTTP_GET, handleUpdatePage);                             //  무선랜으로 펌웨어 업데이트하기
   server.on("/update", HTTP_POST, handleUpdateResult, handleUpdateUpload);      // 2. POST 요청: 실제 파일 업로드 및 플래싱 처리 (완료 후 handleUpdateResult 호출)
+
+
+  server.on("/mqttconfig", HTTP_GET, handleMQTTConfig);                         // MQTT 설정 페이지 경로 등록
+  server.on("/mqttsave", HTTP_POST, handleMQTTSave);
 
   server.begin();
 
@@ -3061,6 +3489,9 @@ void loop() {
   
   server.handleClient();
   handleEncoderButton();
+
+
+  handleMQTT();                                 // MQTT 연결 유지 및 데이터 전송 처리
 
 
   // Check for manual humidifier auto-off
