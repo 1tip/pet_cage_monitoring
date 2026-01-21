@@ -6,52 +6,52 @@ mqtt:
   # 1. 온도 센서
   sensor:
     - name: "Temperature"
-      state_topic: "cage2/temp"
+      state_topic: "cage/temp"
       unit_of_measurement: "°C"
       device_class: temperature
-      unique_id: "lizard_cage2_temp_01"
+      unique_id: "lizard_cage_temp_01"
       # [추가] 기기 그룹화 정보
-      device: &cage2_device_info
-        identifiers: ["cage2_esp32_monitor"]  # 이 ID가 같으면 한 기기로 묶임
-        name: "Lizard Cage 2"
+      device: &cage_device_info
+        identifiers: ["cage_esp32_monitor"]  # 이 ID가 같으면 한 기기로 묶임
+        name: "Lizard Cage"
         model: "ESP32 Smart Monitor"
         manufacturer: "Custom DIY"
 
     # 2. 습도 센서
     - name: "Humidity"
-      state_topic: "cage2/humi"
+      state_topic: "cage/humi"
       unit_of_measurement: "%"
       device_class: humidity
-      unique_id: "lizard_cage2_humi_01"
+      unique_id: "lizard_cage_humi_01"
       # [추가] 위와 동일한 기기 정보 사용
-      device: *cage2_device_info
+      device: *cage_device_info
 
   # 3. 장치 작동 상태
   binary_sensor:
     - name: "Humidifier State"
-      state_topic: "cage2/humidifier"
+      state_topic: "cage/humidifier"
       payload_on: "1"
       payload_off: "0"
       device_class: moisture
-      unique_id: "lizard_cage2_humi_state"
+      unique_id: "lizard_cage_humi_state"
       # [추가] 기기 정보 연결
-      device: *cage2_device_info
+      device: *cage_device_info
 
     - name: "Heater State"
-      state_topic: "cage2/heater"
+      state_topic: "cage/heater"
       payload_on: "1"
       payload_off: "0"
       device_class: heat
-      unique_id: "lizard_cage2_heater_state"
+      unique_id: "lizard_cage_heater_state"
       # [추가] 기기 정보 연결
-      device: *cage2_device_info
+      device: *cage_device_info
 
     - name: "Fan State"
-      state_topic: "cage2/fan"
+      state_topic: "cage/fan"
       payload_on: "1"
       payload_off: "0"
       device_class: running
       icon: mdi:fan
-      unique_id: "lizard_cage2_fan_state"
+      unique_id: "lizard_cage_fan_state"
       # [추가] 기기 정보 연결
-      device: *cage2_device_info
+      device: *cage_device_info
