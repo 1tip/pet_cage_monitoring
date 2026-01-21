@@ -3,55 +3,134 @@
 
 
 mqtt:
-  # 1. 온도 센서
+  # ==========================================================
+  # 1. 아날로그 센서 (온도, 습도) 정의
+  # ==========================================================
   sensor:
-    - name: "Temperature"
+    # --- [Group 1] 운용 중인 Cage (Topic: cage/...) ---
+    - name: "Lizard Cage Temp"
       state_topic: "cage/temp"
       unit_of_measurement: "°C"
       device_class: temperature
-      unique_id: "lizard_cage_temp_01"
-      # [추가] 기기 그룹화 정보
-      device: &cage_device_info
-        identifiers: ["cage_esp32_monitor"]  # 이 ID가 같으면 한 기기로 묶임
-        name: "Lizard Cage"
-        model: "ESP32 Smart Monitor"
+      unique_id: "lizard_cage_temp_main"
+      device:
+        identifiers: ["cage_monitor"]       # [핵심] 운용 그룹 ID
+        name: "Lizard Cage (Main)"
+        model: "ESP32 Monitor v1"
         manufacturer: "Custom DIY"
 
-    # 2. 습도 센서
-    - name: "Humidity"
+    - name: "Lizard Cage Humidity"
       state_topic: "cage/humi"
       unit_of_measurement: "%"
       device_class: humidity
-      unique_id: "lizard_cage_humi_01"
-      # [추가] 위와 동일한 기기 정보 사용
-      device: *cage_device_info
+      unique_id: "lizard_cage_humi_main"
+      device:
+        identifiers: ["cage_monitor"]       # 위와 동일 (같은 기기로 묶임)
+        name: "Lizard Cage (Main)"
+        model: "ESP32 Monitor v1"
+        manufacturer: "Custom DIY"
 
-  # 3. 장치 작동 상태
+    # --- [Group 2] 테스트용 Cage2 (Topic: cage2/...) ---
+    - name: "Lizard Cage2 Temp"
+      state_topic: "cage2/temp"
+      unit_of_measurement: "°C"
+      device_class: temperature
+      unique_id: "lizard_cage2_temp_test"
+      device:
+        identifiers: ["cage2_monitor"]      # [핵심] 테스트 그룹 ID
+        name: "Lizard Cage 2 (Test)"
+        model: "ESP32 Monitor v2"
+        manufacturer: "Custom DIY"
+
+    - name: "Lizard Cage2 Humidity"
+      state_topic: "cage2/humi"
+      unit_of_measurement: "%"
+      device_class: humidity
+      unique_id: "lizard_cage2_humi_test"
+      device:
+        identifiers: ["cage2_monitor"]      # 위와 동일 (같은 기기로 묶임)
+        name: "Lizard Cage 2 (Test)"
+        model: "ESP32 Monitor v2"
+        manufacturer: "Custom DIY"
+
+
+  # ==========================================================
+  # 2. 디지털 센서 (작동 상태: 가습기, 히터, 팬) 정의
+  # ==========================================================
   binary_sensor:
-    - name: "Humidifier State"
+    # --- [Group 1] 운용 중인 Cage ---
+    - name: "Lizard Cage Humidifier State"
       state_topic: "cage/humidifier"
       payload_on: "1"
       payload_off: "0"
       device_class: moisture
-      unique_id: "lizard_cage_humi_state"
-      # [추가] 기기 정보 연결
-      device: *cage_device_info
+      unique_id: "lizard_cage_humi_state_main"
+      device:
+        identifiers: ["cage_monitor"]
+        name: "Lizard Cage (Main)"
+        model: "ESP32 Monitor v1"
+        manufacturer: "Custom DIY"
 
-    - name: "Heater State"
+    - name: "Lizard Cage Heater State"
       state_topic: "cage/heater"
       payload_on: "1"
       payload_off: "0"
       device_class: heat
-      unique_id: "lizard_cage_heater_state"
-      # [추가] 기기 정보 연결
-      device: *cage_device_info
+      unique_id: "lizard_cage_heater_state_main"
+      device:
+        identifiers: ["cage_monitor"]
+        name: "Lizard Cage (Main)"
+        model: "ESP32 Monitor v1"
+        manufacturer: "Custom DIY"
 
-    - name: "Fan State"
+    - name: "Lizard Cage Fan State"
       state_topic: "cage/fan"
       payload_on: "1"
       payload_off: "0"
       device_class: running
       icon: mdi:fan
-      unique_id: "lizard_cage_fan_state"
-      # [추가] 기기 정보 연결
-      device: *cage_device_info
+      unique_id: "lizard_cage_fan_state_main"
+      device:
+        identifiers: ["cage_monitor"]
+        name: "Lizard Cage (Main)"
+        model: "ESP32 Monitor v1"
+        manufacturer: "Custom DIY"
+
+
+    # --- [Group 2] 테스트용 Cage2 ---
+    - name: "Lizard Cage2 Humidifier State"
+      state_topic: "cage2/humidifier"
+      payload_on: "1"
+      payload_off: "0"
+      device_class: moisture
+      unique_id: "lizard_cage2_humi_state_test"
+      device:
+        identifiers: ["cage2_monitor"]
+        name: "Lizard Cage 2 (Test)"
+        model: "ESP32 Monitor v2"
+        manufacturer: "Custom DIY"
+
+    - name: "Lizard Cage2 Heater State"
+      state_topic: "cage2/heater"
+      payload_on: "1"
+      payload_off: "0"
+      device_class: heat
+      unique_id: "lizard_cage2_heater_state_test"
+      device:
+        identifiers: ["cage2_monitor"]
+        name: "Lizard Cage 2 (Test)"
+        model: "ESP32 Monitor v2"
+        manufacturer: "Custom DIY"
+
+    - name: "Lizard Cage2 Fan State"
+      state_topic: "cage2/fan"
+      payload_on: "1"
+      payload_off: "0"
+      device_class: running
+      icon: mdi:fan
+      unique_id: "lizard_cage2_fan_state_test"
+      device:
+        identifiers: ["cage2_monitor"]
+        name: "Lizard Cage 2 (Test)"
+        model: "ESP32 Monitor v2"
+        manufacturer: "Custom DIY"
