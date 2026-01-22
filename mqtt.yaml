@@ -1,11 +1,12 @@
 # HomeAssistant.yaml
 # mqtt.yaml
+# device_class를 맥락에 맞게 수정 (On/Off (켜짐/꺼짐)로 표시)
 
 
 mqtt:
   # ==========================================================
-  # 1. 아날로그 센서 (온도, 습도) 정의
-  # state_class: measurement 가 추가됨 (통계그래프에서 센서가 보이도록)
+  # 1. 아날로그 센서 (온도, 습도)
+  # - state_class: measurement 유지 (그래프용)
   # ==========================================================
   sensor:
     # --- [Group 1] 운용 중인 Cage (Topic: cage/...) ---
@@ -13,7 +14,7 @@ mqtt:
       state_topic: "cage/temp"
       unit_of_measurement: "°C"
       device_class: temperature
-      state_class: measurement            # [추가] 통계 그래프를 위해 필수
+      state_class: measurement
       unique_id: "lizard_cage_temp_main"
       device:
         identifiers: ["cage_monitor"]
@@ -25,7 +26,7 @@ mqtt:
       state_topic: "cage/humi"
       unit_of_measurement: "%"
       device_class: humidity
-      state_class: measurement            # [추가] 통계 그래프를 위해 필수
+      state_class: measurement
       unique_id: "lizard_cage_humi_main"
       device:
         identifiers: ["cage_monitor"]
@@ -38,7 +39,7 @@ mqtt:
       state_topic: "cage2/temp"
       unit_of_measurement: "°C"
       device_class: temperature
-      state_class: measurement            # [추가] 통계 그래프를 위해 필수
+      state_class: measurement
       unique_id: "lizard_cage2_temp_test"
       device:
         identifiers: ["cage2_monitor"]
@@ -50,7 +51,7 @@ mqtt:
       state_topic: "cage2/humi"
       unit_of_measurement: "%"
       device_class: humidity
-      state_class: measurement            # [추가] 통계 그래프를 위해 필수
+      state_class: measurement
       unique_id: "lizard_cage2_humi_test"
       device:
         identifiers: ["cage2_monitor"]
@@ -60,16 +61,19 @@ mqtt:
 
 
   # ==========================================================
-  # 2. 디지털 센서 (작동 상태: 가습기, 히터, 팬) 정의
-  # (Binary Sensor는 On/Off 기록만 남으므로 state_class가 필요 없습니다)
+  # 2. 디지털 센서 (작동 상태: 가습기, 히터, 팬)
+  # - device_class 삭제함 -> 결과: "켜짐" / "꺼짐" 으로 표시됨
   # ==========================================================
   binary_sensor:
     # --- [Group 1] 운용 중인 Cage ---
+    
+    # 1. 가습기
     - name: "Lizard Cage Humidifier State"
       state_topic: "cage/humidifier"
       payload_on: "1"
       payload_off: "0"
-      device_class: moisture
+      # device_class 삭제됨 (기본 On/Off)
+      icon: mdi:air-humidifier
       unique_id: "lizard_cage_humi_state_main"
       device:
         identifiers: ["cage_monitor"]
@@ -77,11 +81,13 @@ mqtt:
         model: "ESP32 Monitor v1"
         manufacturer: "Custom DIY"
 
+    # 2. 히터
     - name: "Lizard Cage Heater State"
       state_topic: "cage/heater"
       payload_on: "1"
       payload_off: "0"
-      device_class: heat
+      # device_class 삭제됨 (기본 On/Off)
+      icon: mdi:radiator
       unique_id: "lizard_cage_heater_state_main"
       device:
         identifiers: ["cage_monitor"]
@@ -89,11 +95,12 @@ mqtt:
         model: "ESP32 Monitor v1"
         manufacturer: "Custom DIY"
 
+    # 3. 팬
     - name: "Lizard Cage Fan State"
       state_topic: "cage/fan"
       payload_on: "1"
       payload_off: "0"
-      device_class: running
+      # device_class 삭제됨 (기본 On/Off)
       icon: mdi:fan
       unique_id: "lizard_cage_fan_state_main"
       device:
@@ -104,11 +111,14 @@ mqtt:
 
 
     # --- [Group 2] 테스트용 Cage2 ---
+    
+    # 1. 가습기 (Cage2)
     - name: "Lizard Cage2 Humidifier State"
       state_topic: "cage2/humidifier"
       payload_on: "1"
       payload_off: "0"
-      device_class: moisture
+      # device_class 삭제됨
+      icon: mdi:air-humidifier
       unique_id: "lizard_cage2_humi_state_test"
       device:
         identifiers: ["cage2_monitor"]
@@ -116,11 +126,13 @@ mqtt:
         model: "ESP32 Monitor v2"
         manufacturer: "Custom DIY"
 
+    # 2. 히터 (Cage2)
     - name: "Lizard Cage2 Heater State"
       state_topic: "cage2/heater"
       payload_on: "1"
       payload_off: "0"
-      device_class: heat
+      # device_class 삭제됨
+      icon: mdi:radiator
       unique_id: "lizard_cage2_heater_state_test"
       device:
         identifiers: ["cage2_monitor"]
@@ -128,11 +140,12 @@ mqtt:
         model: "ESP32 Monitor v2"
         manufacturer: "Custom DIY"
 
+    # 3. 팬 (Cage2)
     - name: "Lizard Cage2 Fan State"
       state_topic: "cage2/fan"
       payload_on: "1"
       payload_off: "0"
-      device_class: running
+      # device_class 삭제됨
       icon: mdi:fan
       unique_id: "lizard_cage2_fan_state_test"
       device:
@@ -140,4 +153,5 @@ mqtt:
         name: "Lizard Cage 2 (Test)"
         model: "ESP32 Monitor v2"
         manufacturer: "Custom DIY"
+
         
