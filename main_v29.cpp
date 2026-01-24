@@ -1,4 +1,4 @@
-// MQTT 기능 추가2
+// LittleFS 파일시스템 깨졌을 때 오류 수정
 /**************************************************************
  * Lizard Cage Monitoring (Stable + Scroll Graph + External AP + Long-term Graph)
  * ESP32 + TFT_eSPI + DHT22 + Rotary Encoder
@@ -38,7 +38,7 @@
 
 using namespace fs;             // File 사용 가능
 
-
+int crashCount = 0;
 
 
 // ================== MQTT Configuration [수정] ==================
@@ -159,7 +159,7 @@ int currentSensorType = 0;               // 0: SHT41, 1: AHT20+BMP280
 #define INVALID_VALUE  -9999              // int16_t 자료형 사용시
 
 #define SAMPLE_INTERVAL 1000          // 온/습도 센서
-#define GRAPH_SAMPLE_INTERVAL_SEC 12  // 그래프용 샘플 간격(초) (10,15,20 선택 가능)
+#define GRAPH_SAMPLE_INTERVAL_SEC 12  // 그래프용 샘플 간격(초) (10,15,20 선택 가능)  // 파일시스템 기록 최소단위 시간 (12초)
 unsigned long lastGraphSampleMs = 0;   // 그래프용 마지막 push 시간
 
 // ================== Log Configuration ==================
@@ -425,88 +425,179 @@ void updateLayout() {
 
 
 // [수정] 부팅 시 마지막 기록 위치를 자동으로 스캔하는 로직   (플레시메모리 수명 향상)
-void initFlashStorage() {
-  if (!LittleFS.begin(true)) {
-    lcdPrint("LittleFS Mount Failed!");
-    delay(5000);
-    ESP.restart();
-  }
 
-  // 로그 파일이 없으면 새로 생성
+
+
+// <주석 삭제금지>
+// [수정] 부팅 시 마지막 기록 위치를 자동으로 스캔하는 로직(플레시메모리 수명 향상) + 무한 재부팅 현상 예방
+// esp_task_wdt_reset() 추가: for 반복문 안에서 10번 돌 때마다 와치독 타이머를 리셋해 줍니다. 이제 파일이 아무리 커도(스캔이 10초가 걸려도) 재부팅 방지함
+// 1. 파일 시스템 깨짐 자동 복구           if (!LittleFS.begin(true)) { ... }
+// 2. 파일이 비정상적으로 클 때 복구       if (maxRecords > FLASH_MAX_RECORDS + 100) {LittleFS.format(); ESP.restart(); }
+// 3. 인덱스 오류 자동 보정                if (logMeta.head_index >= FLASH_MAX_RECORDS) logMeta.head_index = 0;
+// 4. 무한 재부팅(와치독) 방지 (추가됨)    if (i % 10 == 0) esp_task_wdt_reset();
+
+
+
+
+
+void initFlashStorage() {
+  Serial.print("Mounting LittleFS... ");
+  // 1. 마운트 시도
+  if (!LittleFS.begin(true)) {
+    Serial.println("Mount Failed! Formatted."); 
+    // 마운트 자체가 안 되면 어쩔 수 없이 포맷됨 (데이터 유실 불가피)
+    logMeta.head_index = 0;
+    logMeta.record_count = 0;
+    return;
+  }
+  Serial.println("OK");
+
+  // 2. 로그 파일 존재 확인
   if (!LittleFS.exists(LOG_FILE)) {
+    Serial.println("No log file. Creating new.");
     File logFile = LittleFS.open(LOG_FILE, "w");
     if (logFile) logFile.close();
+    
     logMeta.head_index = 0;
     logMeta.record_count = 0;
     return;
   }
 
-  // 로그 파일이 있으면 스캔 시작
-  File logFile = LittleFS.open(LOG_FILE, "r");
+  // 3. 파일 스캔 및 데이터 살리기
+  File logFile = LittleFS.open(LOG_FILE, "r"); // 읽기 모드로 열기
   size_t fileSize = logFile.size();
-  size_t maxRecords = fileSize / sizeof(LogRecord);
+  size_t recordSize = sizeof(LogRecord);
   
+  // [핵심 1] 깨진 부분 계산 (나머지 바이트)
+  size_t remainder = fileSize % recordSize;
+  
+  // 만약 찌꺼기가 있다면?
+  if (remainder != 0) {
+      Serial.printf("[Warning] Data mismatch found (%u bytes). Ignoring tail.\n", remainder);
+      // 파일을 지우지 않고, 그냥 나머지 부분을 무시합니다.
+      // fileSize / recordSize 는 정수 나눗셈이므로 나머지는 자동으로 버려집니다.
+  }
+
+  // [핵심 2] 정상적인 레코드 개수만 계산
+  size_t validRecords = fileSize / recordSize;
+  
+  // 단, 파일이 비정상적으로 너무 크면(플래시 용량 초과) 이건 못 살림 -> 삭제
+  if (validRecords > FLASH_MAX_RECORDS + 500) {
+      Serial.println("[Critical] File too corrupted (Size limit exceeded). Deleting...");
+      logFile.close();
+      LittleFS.remove(LOG_FILE);
+      logMeta.head_index = 0;
+      logMeta.record_count = 0;
+      return;
+  }
+
   logMeta.head_index = 0;
   logMeta.record_count = 0;
 
-  if (maxRecords > 0) {
+  Serial.printf("Recovering %u records... ", validRecords);
+
+  if (validRecords > 0) {
     LogRecord tempRec;
     uint32_t lastTs = 0;
     
-    // 파일 전체를 훑어서 마지막 기록 위치 찾기
-    for (size_t i = 0; i < maxRecords; i++) {
-        logFile.read((uint8_t*)&tempRec, sizeof(LogRecord));
+    // 정상적인 개수만큼만 반복 (깨진 끝부분은 읽지 않음)
+    for (size_t i = 0; i < validRecords; i++) {
+        // [중요] 스캔 중 와치독 리셋 (재부팅 방지)
+        if (i % 10 == 0) esp_task_wdt_reset(); 
+
+        logFile.read((uint8_t*)&tempRec, recordSize);
         
-        // 1. 타임스탬프가 0이면(빈 데이터) 여기가 끝
+        // 1. 타임스탬프 0이면 끝
         if (tempRec.ts == 0) {
             logMeta.head_index = i;
             break; 
         }
         
-        // 2. 현재 시간이 이전 시간보다 과거라면? (순환 버퍼가 한 바퀴 돌았다는 뜻)
-        // 예: [ ... 10:00, 10:01, 09:00 ... ] -> 09:00 자리가 현재 쓸 위치(head)
+        // 2. 순환 지점 찾기
         if (i > 0 && tempRec.ts < lastTs) {
             logMeta.head_index = i;
-            // 순환된 경우 레코드 수는 꽉 찬 것으로 간주
             logMeta.record_count = FLASH_MAX_RECORDS; 
             break; 
         }
         
         lastTs = tempRec.ts;
-        logMeta.head_index = i + 1; // 계속 다음 칸으로 이동
+        logMeta.head_index = i + 1;
         logMeta.record_count++;
-    }
-    
-    // 인덱스가 범위를 넘어가면 0으로 초기화
-    if (logMeta.head_index >= FLASH_MAX_RECORDS) {
-        logMeta.head_index = 0;
     }
   }
   logFile.close();
+
+  // 인덱스 안전장치 (범위 벗어나면 0으로, 데이터는 유지)
+  if (logMeta.head_index >= FLASH_MAX_RECORDS) {
+      logMeta.head_index = 0;
+  }
+  
+  Serial.printf("Done. Data Saved. Head: %u\n", logMeta.head_index);
 }
+
+
 
 
 
 
 void appendLogRecord(LogRecord& newRecord) {
-  if (!timeSynced) return;
+    // 1. 시간이 동기화되지 않았으면 저장하지 않음 (쓰레기 데이터 방지)
+    if (!timeSynced) return;
 
-  File logFile = LittleFS.open(LOG_FILE, "r+");
-  if (!logFile) {
-    logFile = LittleFS.open(LOG_FILE, "w+");
-  }
+    // [중요] 저장 작업 시작 전 와치독 리셋 (여기서 멈춤 방지)
+    esp_task_wdt_reset();
 
-  if (logFile) {
-    logFile.seek(logMeta.head_index * sizeof(LogRecord));
-    logFile.write((uint8_t*)&newRecord, sizeof(LogRecord));
+    // 2. 인덱스 안전장치 (메모리 상의 인덱스가 깨졌는지 확인)
+    if (logMeta.head_index >= FLASH_MAX_RECORDS) {
+        Serial.printf("[Error] Index OOB during write (%u). Resetting to 0.\n", logMeta.head_index);
+        logMeta.head_index = 0;
+        // 필요하다면 여기서 record_count도 0으로 초기화
+    }
+
+    // 3. 파일 열기 ("r+"는 읽기/쓰기 모드, 파일이 있어야 함)
+    File logFile = LittleFS.open(LOG_FILE, "r+");
+    
+    // 만약 파일이 없어서 안 열리면? -> "w" 모드로 새로 생성
+    if (!logFile) {
+        Serial.println("[Info] Log file missing. Creating new one.");
+        logFile = LittleFS.open(LOG_FILE, "w");
+        if (!logFile) {
+            Serial.println("[Critical] Failed to create log file!");
+            return;
+        }
+    }
+
+    // 4. 데이터 쓰기
+    // 해당 위치로 이동 (Seek)
+    size_t offset = logMeta.head_index * sizeof(LogRecord);
+    
+    // Seek 시도. 만약 파일 크기보다 훨씬 뒤로 Seek하면 LittleFS는 0으로 채우거나 에러가 날 수 있음.
+    // 하지만 우리는 initFlashStorage에서 검증했으므로 믿고 진행.
+    logFile.seek(offset);
+    
+    size_t written = logFile.write((uint8_t*)&newRecord, sizeof(LogRecord));
     logFile.close();
 
-    logMeta.head_index = (logMeta.head_index + 1) % FLASH_MAX_RECORDS;
-    if (logMeta.record_count < FLASH_MAX_RECORDS) {
-      logMeta.record_count++;
+    // 5. 쓰기 결과 확인
+    if (written == sizeof(LogRecord)) {
+        // 성공 시 인덱스 증가
+        logMeta.head_index = (logMeta.head_index + 1) % FLASH_MAX_RECORDS;
+        if (logMeta.record_count < FLASH_MAX_RECORDS) {
+            logMeta.record_count++;
+        }
+        // Serial.println("Saved OK."); // 디버깅용 (너무 자주 뜨면 주석 처리)
+    } else {
+        Serial.println("[Error] Write failed! (Disk full or Corrupted?)");
+        // 쓰기 실패 시에는 인덱스를 증가시키지 않거나, 다음 시도를 위해 에러 처리
     }
-  }
+
+    // [중요] 작업 완료 후 와치독 리셋
+    esp_task_wdt_reset();
 }
+
+
+
+
 
 
 
@@ -1322,9 +1413,10 @@ void handleEncoderRotation() {
 void lcdPrint(const char* msg) {
     tft.setTextSize(2);
     tft.setTextColor(TFT_WHITE, BG_COLOR);
-    tft.setCursor(50, 100);
+    if (screenRotation == 0) tft.setCursor(10, 80);
+    else tft.setCursor(50, 50);
     tft.printf(msg);
-    delay(2000);
+    //delay(2000);
 }
 
 
@@ -1527,6 +1619,8 @@ void drawSystemInfo() {
       y_offset += stepY;
       tft.setCursor(10, y_offset); tft.printf("Temp Set: %dC ~ %dC", tempMin, tempMax);
   }
+  y_offset += stepY;
+  tft.setCursor(10, y_offset); tft.printf("Crash Count: %d", crashCount);
 }
 
 
@@ -1734,7 +1828,7 @@ canvas{width:100%;height:150px;display:block}
 .leg-item { display: inline-block; margin-left: 10px; color: #666; }
 .dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
 
-</style></head><body><div class="container"><h2>Device Dashboard</h2>
+</style></head><body><div class="container"><h2 id="dashTitle">Device Dashboard</h2>
 
 <div class="chart-container">
     <div class="header-row">
@@ -1757,6 +1851,12 @@ canvas{width:100%;height:150px;display:block}
 
     <canvas id="myChart"></canvas><div id="chartMsg">Loading...</div>
 </div><br>)rawliteral";
+
+
+
+
+
+
 
 
 
@@ -1950,7 +2050,7 @@ setInterval(updateLiveStatus, 4000);
 
 
 
-
+/*
 void handleDashboard() {
     server.sendHeader("Connection", "close");
     server.setContentLength(CONTENT_LENGTH_UNKNOWN);
@@ -1961,9 +2061,24 @@ void handleDashboard() {
     server.sendContent_P(DASHBOARD_PART3);
     server.sendContent("");
 }
+*/
 
 
 
+
+void handleDashboard() {
+    server.sendHeader("Connection", "close");
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server.send(200, "text/html", "");
+    
+    // 기존 HTML 덩어리 전송
+    server.sendContent_P(DASHBOARD_PART1);
+    server.sendContent_P(DASHBOARD_PART2);
+    server.sendContent_P(DASHBOARD_PART3);
+    server.sendContent("<script>document.getElementById('dashTitle').innerText += ' (" + loginUser + ")';</script>");
+
+    server.sendContent(""); // 전송 종료
+}
 
 
 
@@ -3278,9 +3393,55 @@ void handleUpdatePage() {
 // =========================================
 void setup() {
 
-  // [추가] 와치독 타이머 초기화 (가장 먼저 실행)
-  esp_task_wdt_init(WDT_TIMEOUT, true); 
-  esp_task_wdt_add(NULL); // 현재 스레드(loop)를 감시 대상에 추가
+    // [추가] 와치독 타이머 초기화 (가장 먼저 실행)
+    esp_task_wdt_init(WDT_TIMEOUT, true); 
+    esp_task_wdt_add(NULL); // 현재 스레드(loop)를 감시 대상에 추가
+
+
+
+    // ============================================================
+    // [수정된 복구 로직]
+    // ============================================================
+    Preferences prefs;
+    prefs.begin("boot_counter", false); 
+    //int crashCount = prefs.getInt("crash_count", 0);
+    crashCount = prefs.getInt("crash_count", 0);
+
+    tft.init();
+    tft.fillScreen(BG_COLOR);
+    if (crashCount == 0) { lcdPrint("Crash Count : 0"); delay(1000); }
+    if (crashCount == 1) { lcdPrint("Crash Count : 1"); delay(1000); }
+    if (crashCount == 2) { lcdPrint("Crash Count : 2"); delay(1000); }
+    if (crashCount == 3) { lcdPrint("Crash Count : 3"); delay(1000); }
+    if (crashCount == 4) { lcdPrint("Crash Count : 4"); delay(1000); }
+    if (crashCount == 5) { lcdPrint("Crash Count : 5"); delay(1000); }
+
+    prefs.putInt("crash_count", crashCount + 1);
+    // [핵심] 포맷 전에 마운트를 먼저 시도해야 파티션 정보를 가져옵니다.
+    // true 옵션: 마운트 실패 시 포맷 시도 (이것만으로도 복구될 수 있음)
+    if (crashCount >= 5) {
+      // [핵심] 포맷 전에 마운트를 먼저 시도해야 파티션 정보를 가져옵니다.
+      // true 옵션: 마운트 실패 시 포맷 시도 (이것만으로도 복구될 수 있음)
+      if (!LittleFS.begin(true)) {
+          //Serial.println("Mount failed, but format might have triggered by begin(true)");
+          lcdPrint("Mount failed");
+      }
+      
+      // 혹시 모르니 명시적으로 포맷 수행 (이제 파티션 정보를 아는 상태)
+      //Serial.println("Forcing Format...");
+      lcdPrint("Forcing Format...");
+      LittleFS.format(); 
+      
+      prefs.putInt("crash_count", 0);
+      prefs.end();
+      
+      delay(100);
+      ESP.restart();
+    }
+    prefs.end();
+    // ============================================================
+
+
 
 
   pinMode(ENCODER_CLK, INPUT_PULLUP);
@@ -3305,7 +3466,6 @@ void setup() {
   pinMode(FAN_PIN, OUTPUT);                 // FAN핀 설정
   digitalWrite(FAN_PIN, LOW);               // FAN 전원차단(OFF)
 
- 
   initFlashStorage();
 
   // --- [수정] 설정값 불러오기 및 센서 초기화 ---
@@ -3411,10 +3571,6 @@ void setup() {
 
 
 
-
-
-
-
   
   Wire.begin(I2C_SDA, I2C_SCL);
   Wire.setTimeout(1000);            // Set 1ms timeout for I2C communication
@@ -3428,7 +3584,7 @@ void setup() {
     if (!aht20.begin()) {}                      // 에러 처리 생략
     if (!bmp280.begin(0x76)) {}                 // 에러 처리 생략
   }
-  
+
 
 
   drawTitle();
@@ -3490,8 +3646,25 @@ void loop() {
   server.handleClient();
   handleEncoderButton();
 
-
   handleMQTT();                                 // MQTT 연결 유지 및 데이터 전송 처리
+
+
+  // ============================================================
+  // [추가] 시스템 안정화 확인 (부팅 후 60초간 살아있으면 카운터 리셋)  // GRAPH_SAMPLE_INTERVAL_SEC ▶ 파일시스템 기록 최소단위 시간(12초)
+  // ============================================================
+  static bool bootSuccessChecked = false;
+  if (!bootSuccessChecked && nowMs > (GRAPH_SAMPLE_INTERVAL_SEC * 1000 + 5000)) {
+    crashCount = 0;
+    Preferences prefs;
+    prefs.begin("boot_counter", false);
+    prefs.putInt("crash_count", 0); // "나 이제 멀쩡해!" 0으로 초기화
+    prefs.end();
+    bootSuccessChecked = true;
+  }
+  // ============================================================
+
+
+
 
 
   // Check for manual humidifier auto-off
